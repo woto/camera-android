@@ -19,8 +19,8 @@ object NetworkClient {
     
     // REPLACE THIS WITH YOUR COMPUTER'S LOCAL IP if testing on phone
     // 10.0.2.2 is "localhost" for Android Emulator
-    private const val BASE_URL = "https://consumers-dimensional-eligibility-disco.trycloudflare.com" 
-    private const val WS_URL = "wss://consumers-dimensional-eligibility-disco.trycloudflare.com/cable"
+    private const val BASE_URL = "https://chemical-topics-steady-morris.trycloudflare.com" 
+    private const val WS_URL = "wss://chemical-topics-steady-morris.trycloudflare.com/cable"
 
     fun connectWebSocket() {
         val request = Request.Builder()
