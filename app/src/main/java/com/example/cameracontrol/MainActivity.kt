@@ -80,6 +80,10 @@ fun CameraScreen() {
             )
         } else {
             // Already matched permissions, start connection
+            val camPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+            val micPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            AppLogger.log("Main Perms: Cam=$camPerm, Mic=$micPerm")
+            
             AppLogger.log("Permissions OK. Connecting WS...")
             NetworkClient.connectWebSocket()
         }
@@ -92,6 +96,16 @@ fun CameraScreen() {
         }
     }
 
+    val recorder = remember { VideoRecorder(context, lifecycleOwner) }
+
+    // Ensure recorder is fully stopped when the composable leaves the tree
+    DisposableEffect(Unit) {
+        onDispose {
+            AppLogger.log("Disposing recorder")
+            recorder.stopCamera()
+        }
+    }
+    
     if (hasPermissions) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Camera Preview
@@ -99,14 +113,10 @@ fun CameraScreen() {
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        recorder.startCamera(this.surfaceProvider)
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
-                update = { previewView ->
-                    // Initialize recorder logic
-                    val recorder = VideoRecorder(context, lifecycleOwner)
-                    recorder.startCamera(previewView.surfaceProvider)
-                }
+                modifier = Modifier.fillMaxSize()
             )
             
             // DEBUG LOGS OVERLAY

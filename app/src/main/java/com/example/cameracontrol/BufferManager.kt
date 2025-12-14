@@ -42,12 +42,18 @@ object BufferManager {
             return
         }
         
-        val startTime = frames.first().bufferInfo.presentationTimeUs / 1000 // to ms
-        val endTime = frames.last().bufferInfo.presentationTimeUs / 1000 // to ms
+        // Fix: Sort frames by presentation time to ensure monotonic writing
+        // and find the true minimum timestamp to prevent negative values.
+        val sortedFrames = frames.sortedBy { it.bufferInfo.presentationTimeUs }
+        
+        val firstTimeUs = sortedFrames.first().bufferInfo.presentationTimeUs
+        val lastTimeUs = sortedFrames.last().bufferInfo.presentationTimeUs
+        
+        val startTime = firstTimeUs / 1000 // to ms
+        val endTime = lastTimeUs / 1000 // to ms
         val systemTime = System.currentTimeMillis()
         
         // Approximate the real start/end time based on system clock
-        // (This is an approximation, but better than raw uptimeUs)
         val endEpoch = systemTime
         val startEpoch = endEpoch - (endTime - startTime)
 
@@ -58,47 +64,65 @@ object BufferManager {
         try {
             val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             
-            // 3. Configure Track using the captured format
-            val videoFormat = snapshot.format
+            // 3. Configure Tracks
+            val videoFormat = snapshot.videoFormat
+            val audioFormat = snapshot.audioFormat
+            
+            var videoTrackIndex = -1
+            var audioTrackIndex = -1
             
             if (videoFormat != null) {
-                // We trust the encoder's format which includes CSD
-                val trackIndex = muxer.addTrack(videoFormat)
-                
+                videoTrackIndex = muxer.addTrack(videoFormat)
                 muxer.setOrientationHint(snapshot.rotation)
-                
-                muxer.start()
-                
-                // 4. Write Frames
-                val firstTimeUs = frames.first().bufferInfo.presentationTimeUs
-                
-                for (frame in frames) {
-                    val info = MediaCodec.BufferInfo()
-                    info.set(
-                        frame.bufferInfo.offset,
-                        frame.bufferInfo.size,
-                        frame.bufferInfo.presentationTimeUs - firstTimeUs,
-                        frame.bufferInfo.flags
-                    )
-                    
-                    muxer.writeSampleData(trackIndex, frame.data, info)
-                }
-                
-                muxer.stop()
-                muxer.release()
-                
-                Log.d(TAG, "Saved MP4: ${outputFile.length()} bytes")
-                AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
-
-                // 5. Upload
-                NetworkClient.uploadFile(outputFile, outputFile.name) {
-                    if (outputFile.exists()) outputFile.delete()
-                    AppLogger.log("Upload & Cleanup Done")
-                }
             } else {
-                 Log.e(TAG, "Missing Codec Format! Cannot mux.")
-                 AppLogger.log("Err: Missing Format")
-                 return
+                Log.e(TAG, "Missing Video Format!")
+                return
+            }
+            
+            if (audioFormat != null) {
+                audioTrackIndex = muxer.addTrack(audioFormat)
+                AppLogger.log("Muxing: Vid+Aud")
+            } else {
+                Log.w(TAG, "Missing Audio Format - Muxing Video Only")
+                AppLogger.log("No Audio Fmt!")
+            }
+            
+            muxer.start()
+            
+            // 4. Write Frames
+            if (sortedFrames.isNotEmpty()) {
+                for (frame in sortedFrames) {
+                    val trackIndex = if (frame.type == CircularBuffer.FrameType.VIDEO) videoTrackIndex else audioTrackIndex
+                    
+                    if (trackIndex >= 0) {
+                        val info = MediaCodec.BufferInfo()
+                        val pts = frame.bufferInfo.presentationTimeUs
+                        
+                        // Fix: Ensure timestamp is never negative relative to start
+                        val relativePts = maxOf(0L, pts - firstTimeUs)
+                        
+                        info.set(
+                            frame.bufferInfo.offset,
+                            frame.bufferInfo.size,
+                            relativePts,
+                            frame.bufferInfo.flags
+                        )
+                        
+                        muxer.writeSampleData(trackIndex, frame.data, info)
+                    }
+                }
+            }
+            
+            muxer.stop()
+            muxer.release()
+            
+            Log.d(TAG, "Saved MP4: ${outputFile.length()} bytes")
+            AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
+
+            // 5. Upload
+            NetworkClient.uploadFile(outputFile, outputFile.name) {
+                if (outputFile.exists()) outputFile.delete()
+                AppLogger.log("Upload & Cleanup Done")
             }
 
         } catch (e: Exception) {
