@@ -9,17 +9,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 
@@ -36,6 +40,15 @@ class MainActivity : ComponentActivity() {
 fun CameraScreen() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val view = LocalView.current
+    
+    // KEEP SCREEN ON
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
     
     // Permission State
     var hasPermissions by remember {
@@ -56,6 +69,7 @@ fun CameraScreen() {
     )
 
     LaunchedEffect(Unit) {
+        AppLogger.log("App Started. Checking Permissions...")
         if (!hasPermissions) {
             launcher.launch(
                 arrayOf(
@@ -63,6 +77,17 @@ fun CameraScreen() {
                     Manifest.permission.RECORD_AUDIO
                 )
             )
+        } else {
+            // Already matched permissions, start connection
+            AppLogger.log("Permissions OK. Connecting WS...")
+            NetworkClient.connectWebSocket()
+        }
+    }
+    
+    // Also trigger if permissions granted later
+    LaunchedEffect(hasPermissions) {
+        if (hasPermissions) {
+            NetworkClient.connectWebSocket()
         }
     }
 
@@ -77,17 +102,34 @@ fun CameraScreen() {
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { previewView ->
-                    // Initialize recorder logic once view is ready
+                    // Initialize recorder logic
                     val recorder = VideoRecorder(context, lifecycleOwner, previewView)
                     recorder.startCamera()
                 }
             )
+            
+            // DEBUG LOGS OVERLAY
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(8.dp)
+                    .align(Alignment.TopCenter)
+            ) {
+                Text("Debug Logs:", color = Color.White, fontSize = 14.sp)
+                LazyColumn(reverseLayout = false) {
+                    items(AppLogger.logs) { log ->
+                        Text(text = log, color = Color.Green, fontSize = 12.sp)
+                    }
+                }
+            }
 
             // Trigger Button
             Button(
                 onClick = { 
+                    AppLogger.log("Manual Trigger Clicked")
                     BufferManager.triggerUpload() 
-                    Toast.makeText(context, "Upload Triggered! Check Logs.", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

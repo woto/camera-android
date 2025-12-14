@@ -38,7 +38,7 @@ class VideoRecorder(
     private val mainHandler = Handler(Looper.getMainLooper())
     
     private var isLooping = false
-    private val CHUNK_DURATION_MS = 5000L // 5 seconds
+    private val CHUNK_DURATION_MS = 1000L // 1 second chunks
 
     private val loopRunnable = object : Runnable {
         override fun run() {
@@ -91,8 +91,10 @@ class VideoRecorder(
         val videoCapture = this.videoCapture ?: return
 
         // Create a unique file for this chunk
-        val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
-            .format(System.currentTimeMillis()) + ".mp4"
+        // Format: [DEVICE_ID]_[TIMESTAMP].mp4
+        val deviceId = DeviceIdentity.getDeviceId(context)
+        val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US).format(System.currentTimeMillis())
+        val name = "${deviceId}_${timestamp}.mp4"
         val file = File(context.cacheDir, name)
 
         val outputOptions = FileOutputOptions.Builder(file).build()
