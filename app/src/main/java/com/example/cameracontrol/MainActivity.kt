@@ -69,6 +69,7 @@ fun CameraScreen() {
     )
 
     LaunchedEffect(Unit) {
+        BufferManager.initialize(context) // Initialize the buffer manager
         AppLogger.log("App Started. Checking Permissions...")
         if (!hasPermissions) {
             launcher.launch(
@@ -103,8 +104,8 @@ fun CameraScreen() {
                 modifier = Modifier.fillMaxSize(),
                 update = { previewView ->
                     // Initialize recorder logic
-                    val recorder = VideoRecorder(context, lifecycleOwner, previewView)
-                    recorder.startCamera()
+                    val recorder = VideoRecorder(context, lifecycleOwner)
+                    recorder.startCamera(previewView.surfaceProvider)
                 }
             )
             
