@@ -61,6 +61,14 @@ class VideoRecorder(
             // We need to bridge the Encoder's Surface to this Preview
             // Once the codec is configured, inputSurface is ready.
             encodingPreview?.setSurfaceProvider { request ->
+                // Capture rotation
+                val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
+                     CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
+                }
+                val rotation = cameraInfo?.getSensorRotationDegrees() ?: 90
+                CircularBuffer.rotationDegrees = rotation
+                Log.d(TAG, "Camera Rotation Set: $rotation")
+
                 if (inputSurface != null) {
                     request.provideSurface(inputSurface!!, executor) { result -> 
                         // Surface release callback

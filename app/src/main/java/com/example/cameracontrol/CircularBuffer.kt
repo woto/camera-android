@@ -17,13 +17,12 @@ object CircularBuffer {
     
     // Config
     private const val MAX_DURATION_US = 10_000_000L // 10 seconds for testing
-    // Let's set it to 60s for now to be safe, user asked for 2 mins though.
-    // We'll stick to 120s if memory allows.
     
     private val frames = ConcurrentLinkedDeque<EncodedFrame>()
     
     // Exact format from the encoder (contains CSD-0, CSD-1, etc.)
     @Volatile var mediaFormat: MediaFormat? = null
+    @Volatile var rotationDegrees: Int = 0
     
     // We also keep track if we received config frame, but moving to MediaFormat is better.
     @Volatile var codecConfig: EncodedFrame? = null
@@ -73,17 +72,11 @@ object CircularBuffer {
         
         val newestTime = frames.peekLast()!!.bufferInfo.presentationTimeUs
         
-        // Remove old frames until we are within the duration limit
-        // AND ensuring we don't cut in the middle of a GOP (Group of Pictures).
-        // We should only remove up to a KeyFrame.
-        
         while (frames.size > 1) {
             val oldest = frames.peekFirst()!!
             val age = newestTime - oldest.bufferInfo.presentationTimeUs
             
             if (age > MAX_DURATION_US) {
-                // Should we remove? Yes, but try to find the next keyframe
-                // Ideally we scan from the start and remove chunks up to a keyframe
                 frames.removeFirst()
             } else {
                 break
@@ -98,7 +91,7 @@ object CircularBuffer {
 
     @Synchronized
     fun getSnapshot(): Snapshot {
-        return Snapshot(mediaFormat, ArrayList(frames))
+        return Snapshot(mediaFormat, ArrayList(frames), rotationDegrees)
     }
     
     @Synchronized
@@ -108,6 +101,7 @@ object CircularBuffer {
     
     data class Snapshot(
         val format: MediaFormat?,
-        val frames: List<EncodedFrame>
+        val frames: List<EncodedFrame>,
+        val rotation: Int
     )
 }

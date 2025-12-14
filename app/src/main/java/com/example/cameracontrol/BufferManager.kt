@@ -64,6 +64,9 @@ object BufferManager {
             if (videoFormat != null) {
                 // We trust the encoder's format which includes CSD
                 val trackIndex = muxer.addTrack(videoFormat)
+                
+                muxer.setOrientationHint(snapshot.rotation)
+                
                 muxer.start()
                 
                 // 4. Write Frames
