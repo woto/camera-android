@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -33,6 +34,7 @@ class VideoRecorder(
     private var audioRecord: AudioRecord? = null
     private var isAudioRecording = false
     private var audioSampleRate = DEFAULT_AUDIO_SAMPLE_RATE
+    private var camera: Camera? = null
     
     // Missing properties
     private var mediaCodec: MediaCodec? = null
@@ -104,7 +106,7 @@ class VideoRecorder(
             try {
                 cameraProvider?.unbindAll()
                 // Bind both the UI preview and the Encoding preview
-                cameraProvider?.bindToLifecycle(
+                camera = cameraProvider?.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
@@ -383,5 +385,15 @@ class VideoRecorder(
         cameraProvider?.unbindAll()
         CircularBuffer.clear()
         executor.shutdown()
+    }
+
+    fun setLinearZoom(value: Float) {
+        try {
+            val clamped = value.coerceIn(0f, 1f)
+            camera?.cameraControl?.setLinearZoom(clamped)
+            AppLogger.log("Zoom: ${"%.2f".format(clamped)}")
+        } catch (_: Exception) {
+            // Camera might not be ready; ignore
+        }
     }
 }

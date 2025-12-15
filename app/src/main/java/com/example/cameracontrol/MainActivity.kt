@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -97,6 +98,7 @@ fun CameraScreen() {
     }
 
     val recorder = remember { VideoRecorder(context, lifecycleOwner) }
+    var zoomLinear by remember { mutableFloatStateOf(0f) }
 
     // Ensure recorder is fully stopped when the composable leaves the tree
     DisposableEffect(Unit) {
@@ -147,6 +149,25 @@ fun CameraScreen() {
                     .padding(32.dp)
             ) {
                 Text("Simulate Server Request")
+            }
+
+            // Zoom control
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                    .width(220.dp)
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .padding(8.dp)
+            ) {
+                Text(text = "Zoom", color = Color.White, fontSize = 12.sp)
+                Slider(
+                    value = zoomLinear,
+                    onValueChange = { value ->
+                        zoomLinear = value
+                        recorder.setLinearZoom(value)
+                    }
+                )
             }
         }
     } else {
