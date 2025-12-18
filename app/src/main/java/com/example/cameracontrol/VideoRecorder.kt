@@ -391,7 +391,6 @@ class VideoRecorder(
         try {
             val clamped = value.coerceIn(0f, 1f)
             camera?.cameraControl?.setLinearZoom(clamped)
-            AppLogger.log("Zoom: ${"%.2f".format(clamped)}")
         } catch (_: Exception) {
             // Camera might not be ready; ignore
         }

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -27,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,6 +104,12 @@ fun CameraScreen() {
     val recorder = remember { VideoRecorder(context, lifecycleOwner) }
     var zoomLinear by remember { mutableFloatStateOf(0f) }
 
+    // Debounce zoom updates to avoid overloading camera control
+    LaunchedEffect(zoomLinear) {
+        delay(60)
+        recorder.setLinearZoom(zoomLinear)
+    }
+
     // Ensure recorder is fully stopped when the composable leaves the tree
     DisposableEffect(Unit) {
         onDispose {
@@ -138,36 +148,49 @@ fun CameraScreen() {
                 }
             }
 
-            // Trigger Button
-            Button(
-                onClick = { 
-                    AppLogger.log("Manual Trigger Clicked")
-                    BufferManager.triggerUpload() 
-                },
+            // Bottom controls: zoom + trigger
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(32.dp)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Simulate Server Request")
-            }
-
-            // Zoom control
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp)
-                    .width(220.dp)
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .padding(8.dp)
-            ) {
-                Text(text = "Zoom", color = Color.White, fontSize = 12.sp)
-                Slider(
-                    value = zoomLinear,
-                    onValueChange = { value ->
-                        zoomLinear = value
-                        recorder.setLinearZoom(value)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xCC1E1E1E)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "Zoom ${(zoomLinear * 100).roundToInt()}%",
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
+                        Slider(
+                            value = zoomLinear,
+                            onValueChange = { value -> zoomLinear = value },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                )
+                }
+
+                Button(
+                    onClick = {
+                        AppLogger.log("Manual Trigger Clicked")
+                        BufferManager.triggerUpload()
+                    },
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                ) {
+                    Text("Simulate")
+                }
             }
         }
     } else {
