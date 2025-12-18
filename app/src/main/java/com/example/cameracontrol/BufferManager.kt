@@ -17,7 +17,7 @@ object BufferManager {
         deviceId = DeviceIdentity.getDeviceId(context)
     }
 
-    fun triggerUpload() {
+    fun triggerUpload(triggerTimestamp: String? = null) {
         if (!::outputDir.isInitialized) {
             Log.e(TAG, "BufferManager not initialized!")
             return
@@ -120,7 +120,7 @@ object BufferManager {
             AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
 
             // 5. Upload
-            NetworkClient.uploadFile(outputFile, outputFile.name) {
+            NetworkClient.uploadFile(outputFile, outputFile.name, triggerTimestamp) {
                 if (outputFile.exists()) outputFile.delete()
                 AppLogger.log("Upload & Cleanup Done")
             }
@@ -131,4 +131,3 @@ object BufferManager {
         }
     }
 }
-

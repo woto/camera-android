@@ -53,7 +53,8 @@ object NetworkClient {
                         if (messageObj != null) {
                              if (messageObj.optString("action") == "capture") {
                                 AppLogger.log("CAPTURE SIGNAL RECEIVED!")
-                                BufferManager.triggerUpload()
+                                val timestamp = messageObj.optString("timestamp", "").ifBlank { null }
+                                BufferManager.triggerUpload(timestamp)
                             }
                         } else {
                             // Message might be a string or int (like a ping timestamp inside a non-standard msg)
@@ -97,16 +98,17 @@ object NetworkClient {
         AppLogger.log("Subscribing to RecordingChannel...")
     }
 
-    fun uploadFile(file: File, remoteFileName: String, onComplete: () -> Unit) {
+    fun uploadFile(file: File, remoteFileName: String, timestamp: String?, onComplete: () -> Unit) {
         val mediaType = "video/mp4".toMediaType()
-        val requestBody = MultipartBody.Builder()
+        val requestBodyBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
                 "video", 
                 remoteFileName, // Use the clean name for the server
                 file.asRequestBody(mediaType)
             )
-            .build()
+        timestamp?.let { requestBodyBuilder.addFormDataPart("timestamp", it) }
+        val requestBody = requestBodyBuilder.build()
             
         AppLogger.log("Uploading: $remoteFileName...")
 
