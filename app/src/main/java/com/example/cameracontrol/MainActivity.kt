@@ -1,8 +1,13 @@
 package com.example.cameracontrol
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.IBinder
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,8 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -45,17 +48,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CameraScreen() {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val view = LocalView.current
-    
-    // KEEP SCREEN ON
-    DisposableEffect(Unit) {
-        view.keepScreenOn = true
-        onDispose {
-            view.keepScreenOn = false
-        }
-    }
-    
+
     // Permission State
     var hasPermissions by remember {
         mutableStateOf(
@@ -89,59 +82,92 @@ fun CameraScreen() {
             val camPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
             val micPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             AppLogger.log("Main Perms: Cam=$camPerm, Mic=$micPerm")
-            
-            AppLogger.log("Permissions OK. Connecting WS...")
-            NetworkClient.connectWebSocket()
         }
     }
     
     // Also trigger if permissions granted later
     LaunchedEffect(hasPermissions) {
-        if (hasPermissions) {
-            NetworkClient.connectWebSocket()
+        // No-op here; service will handle networking when started
+    }
+
+    var cameraService by remember { mutableStateOf<CameraForegroundService?>(null) }
+    var isBound by remember { mutableStateOf(false) }
+
+    DisposableEffect(hasPermissions) {
+        if (!hasPermissions) {
+            cameraService = null
+            isBound = false
+            return@DisposableEffect onDispose { }
+        }
+
+        val intent = Intent(context, CameraForegroundService::class.java).apply {
+            action = CameraForegroundService.ACTION_START
+        }
+
+        ContextCompat.startForegroundService(context, intent)
+
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as? CameraForegroundService.CameraBinder
+                cameraService = binder?.getService()
+                isBound = binder != null
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                cameraService = null
+                isBound = false
+            }
+        }
+
+        val bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        isBound = bound
+
+        onDispose {
+            if (isBound) {
+                context.unbindService(connection)
+            }
+            isBound = false
+            cameraService = null
         }
     }
 
-    val recorder = remember { VideoRecorder(context, lifecycleOwner) }
+    val recorder = cameraService?.getRecorder()
     var zoomLinear by remember { mutableFloatStateOf(0f) }
 
     // Debounce zoom updates to avoid overloading camera control
     LaunchedEffect(zoomLinear) {
         delay(60)
-        recorder.setLinearZoom(zoomLinear)
-    }
-
-    // Ensure recorder is fully stopped when the composable leaves the tree
-    DisposableEffect(Unit) {
-        onDispose {
-            AppLogger.log("Disposing recorder")
-            recorder.stopCamera()
-        }
+        recorder?.setLinearZoom(zoomLinear)
     }
 
     // Brief flash overlay whenever a WebSocket message is received
-    LaunchedEffect(Unit) {
+    LaunchedEffect(recorder) {
+        if (recorder == null) return@LaunchedEffect
         NetworkClient.messageFlash.collectLatest {
             recorder.pulseTorch()
         }
     }
 
     // Keep torch on while disconnected to signal WS issues
-    LaunchedEffect(Unit) {
+    LaunchedEffect(recorder) {
+        if (recorder == null) return@LaunchedEffect
         NetworkClient.connectionStatus.collectLatest { isConnected ->
             recorder.setTorchEnabled(!isConnected)
         }
     }
     
-    if (hasPermissions) {
+    if (hasPermissions && recorder != null) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Camera Preview
             AndroidView(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                        recorder.startCamera(this.surfaceProvider)
+                        recorder.attachPreview(this.surfaceProvider)
                     }
+                },
+                update = { view ->
+                    recorder.attachPreview(view.surfaceProvider)
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -208,9 +234,13 @@ fun CameraScreen() {
                 }
             }
         }
-    } else {
+    } else if (!hasPermissions) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Please grant camera and audio permissions to continue.")
+        }
+    } else {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Starting camera service...")
         }
     }
 }

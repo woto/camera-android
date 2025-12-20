@@ -1,7 +1,7 @@
 package com.example.cameracontrol
 
 import android.content.Context
-import android.hardware.camera2.CameraCharacteristics
+import android.graphics.SurfaceTexture
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
@@ -44,6 +44,7 @@ class VideoRecorder(
     private var isRecording = false
     // Fix: Use 3 threads (Video Loop, Audio Loop, +1 for Surface Callback/Spare)
     private val executor: ExecutorService = Executors.newFixedThreadPool(3)
+    private var boundPreviewProvider: Preview.SurfaceProvider? = null
     private var torchState: Boolean? = null
     
     companion object {
@@ -62,7 +63,21 @@ class VideoRecorder(
         private val PREFERRED_SAMPLE_RATES = listOf(48000, 44100, 32000, 16000)
     }
 
-    fun startCamera(surfaceProvider: Preview.SurfaceProvider) {
+    private val headlessSurfaceProvider: Preview.SurfaceProvider by lazy {
+        Preview.SurfaceProvider { request ->
+            val surfaceTexture = SurfaceTexture(0).apply {
+                setDefaultBufferSize(request.resolution.width, request.resolution.height)
+            }
+            val surface = Surface(surfaceTexture)
+            request.provideSurface(surface, executor) {
+                surface.release()
+                surfaceTexture.release()
+            }
+        }
+    }
+
+    fun startCamera(surfaceProvider: Preview.SurfaceProvider? = null) {
+        surfaceProvider?.let { boundPreviewProvider = it }
         AppLogger.log("startCamera() called")
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
@@ -70,11 +85,10 @@ class VideoRecorder(
             cameraProvider = cameraProviderFuture.get()
             
             // 1. UI Preview (Viewfinder)
+            val uiProvider = boundPreviewProvider ?: headlessSurfaceProvider
             preview = Preview.Builder()
                 .build()
-                .also {
-                    it.setSurfaceProvider(surfaceProvider)
-                }
+                .also { it.setSurfaceProvider(uiProvider) }
 
             // 2. Prepare Encoder & Input Surface
             setupMediaCodec()       // Video
@@ -128,6 +142,15 @@ class VideoRecorder(
                 AppLogger.log("Camera Error: ${exc.message}")
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    fun attachPreview(surfaceProvider: Preview.SurfaceProvider) {
+        boundPreviewProvider = surfaceProvider
+        if (preview == null) {
+            AppLogger.log("Preview not ready yet; will attach when camera starts")
+        } else {
+            preview?.setSurfaceProvider(surfaceProvider)
+        }
     }
 
     fun pulseTorch(durationMs: Long = 200) {
