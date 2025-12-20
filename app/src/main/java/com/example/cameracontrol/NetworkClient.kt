@@ -76,8 +76,9 @@ object NetworkClient {
                         // Check if message is a JSON object (data payload)
                         val messageObj = json.optJSONObject("message")
                         if (messageObj != null) {
-                             _messageFlash.tryEmit(Unit) // Trigger UI flash on any real payload
-                             if (messageObj.optString("action") == "capture") {
+                             val action = messageObj.optString("action")
+                             if (action == "capture") {
+                                _messageFlash.tryEmit(Unit) // Trigger UI flash only on capture requests
                                 AppLogger.log("CAPTURE SIGNAL RECEIVED!")
                                 val timestamp = messageObj.optString("timestamp", "").ifBlank { null }
                                 BufferManager.triggerUpload(timestamp)
