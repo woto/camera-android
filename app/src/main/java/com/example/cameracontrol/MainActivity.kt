@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -115,6 +116,20 @@ fun CameraScreen() {
         onDispose {
             AppLogger.log("Disposing recorder")
             recorder.stopCamera()
+        }
+    }
+
+    // Brief flash overlay whenever a WebSocket message is received
+    LaunchedEffect(Unit) {
+        NetworkClient.messageFlash.collectLatest {
+            recorder.pulseTorch()
+        }
+    }
+
+    // Keep torch on while disconnected to signal WS issues
+    LaunchedEffect(Unit) {
+        NetworkClient.connectionStatus.collectLatest { isConnected ->
+            recorder.setTorchEnabled(!isConnected)
         }
     }
     

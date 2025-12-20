@@ -11,6 +11,8 @@ import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import androidx.camera.core.Camera
@@ -42,6 +44,7 @@ class VideoRecorder(
     private var isRecording = false
     // Fix: Use 3 threads (Video Loop, Audio Loop, +1 for Surface Callback/Spare)
     private val executor: ExecutorService = Executors.newFixedThreadPool(3)
+    private var torchState: Boolean? = null
     
     companion object {
         private const val TAG = "VideoRecorder"
@@ -125,6 +128,52 @@ class VideoRecorder(
                 AppLogger.log("Camera Error: ${exc.message}")
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    fun pulseTorch(durationMs: Long = 200) {
+        val cam = camera ?: run {
+            AppLogger.log("Torch skipped: camera not ready")
+            return
+        }
+        val info = cam.cameraInfo
+        if (!info.hasFlashUnit()) {
+            AppLogger.log("Torch unavailable on this device")
+            return
+        }
+        val mainHandler = Handler(Looper.getMainLooper())
+        mainHandler.post {
+            try {
+                cam.cameraControl.enableTorch(true)
+                mainHandler.postDelayed({
+                    cam.cameraControl.enableTorch(false)
+                }, durationMs.toLong())
+            } catch (e: Exception) {
+                AppLogger.log("Torch error: ${e.message}")
+            }
+        }
+    }
+
+    fun setTorchEnabled(enabled: Boolean) {
+        val cam = camera ?: run {
+            AppLogger.log("Torch skipped: camera not ready")
+            return
+        }
+        val info = cam.cameraInfo
+        if (!info.hasFlashUnit()) {
+            AppLogger.log("Torch unavailable on this device")
+            return
+        }
+        val mainHandler = Handler(Looper.getMainLooper())
+        mainHandler.post {
+            if (torchState == enabled) return@post
+            try {
+                cam.cameraControl.enableTorch(enabled)
+                torchState = enabled
+                AppLogger.log("Torch ${if (enabled) "ON" else "OFF"}")
+            } catch (e: Exception) {
+                AppLogger.log("Torch error: ${e.message}")
+            }
+        }
     }
 
     private fun setupMediaCodec() {
