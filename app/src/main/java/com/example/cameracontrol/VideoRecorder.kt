@@ -7,6 +7,7 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaActionSound
 import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Build
@@ -46,6 +47,10 @@ class VideoRecorder(
     private val executor: ExecutorService = Executors.newFixedThreadPool(3)
     private var boundPreviewProvider: Preview.SurfaceProvider? = null
     private var torchState: Boolean? = null
+    private val shutterSound: MediaActionSound = MediaActionSound().apply {
+        // Preload to avoid latency on first play
+        load(MediaActionSound.START_VIDEO_RECORDING)
+    }
     
     companion object {
         private const val TAG = "VideoRecorder"
@@ -167,6 +172,7 @@ class VideoRecorder(
         mainHandler.post {
             try {
                 cam.cameraControl.enableTorch(true)
+                shutterSound.play(MediaActionSound.START_VIDEO_RECORDING)
                 mainHandler.postDelayed({
                     cam.cameraControl.enableTorch(false)
                 }, durationMs.toLong())
@@ -457,6 +463,9 @@ class VideoRecorder(
         cameraProvider?.unbindAll()
         CircularBuffer.clear()
         executor.shutdown()
+        try {
+            shutterSound.release()
+        } catch (_: Exception) { }
     }
 
     fun setLinearZoom(value: Float) {
