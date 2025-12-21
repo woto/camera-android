@@ -1,3 +1,5 @@
+import java.time.LocalDateTime
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,6 +20,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        
+        // Add Build Time
+        buildConfigField("String", "BUILD_TIME", "\"${LocalDateTime.now()}\"")
     }
 
     buildTypes {
@@ -35,6 +40,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.10"

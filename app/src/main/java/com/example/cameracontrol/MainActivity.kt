@@ -173,20 +173,29 @@ fun CameraScreen() {
             )
             
             // DEBUG LOGS OVERLAY
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .padding(8.dp)
-                    .align(Alignment.TopCenter)
-            ) {
-                Text("Debug Logs:", color = Color.White, fontSize = 14.sp)
-                LazyColumn(reverseLayout = false) {
-                    items(AppLogger.logs) { log ->
-                        Text(text = log, color = Color.Green, fontSize = 12.sp)
+            var showLogs by remember { mutableStateOf(false) }
+
+            if (showLogs) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .padding(8.dp)
+                        .align(Alignment.TopCenter)
+                ) {
+                    Text("Debug Logs:", color = Color.White, fontSize = 14.sp)
+                    LazyColumn(reverseLayout = false) {
+                        items(AppLogger.logs) { log ->
+                            Text(text = log, color = Color.Green, fontSize = 12.sp)
+                        }
                     }
                 }
+            }
+            
+            // Log Build Time on startup
+            LaunchedEffect(Unit) {
+                AppLogger.log("Build Time: " + BuildConfig.BUILD_TIME)
             }
 
             // Bottom controls: zoom + trigger
@@ -198,6 +207,15 @@ fun CameraScreen() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                
+                // Toggle Logs Button
+                Button(
+                    onClick = { showLogs = !showLogs },
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Text(if (showLogs) "Hide Logs" else "Show Logs")
+                }
+
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xCC1E1E1E)),
                     elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
