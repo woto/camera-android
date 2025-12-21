@@ -225,7 +225,7 @@ fun CameraScreen() {
                 Button(
                     onClick = {
                         AppLogger.log("Manual Trigger Clicked")
-                        BufferManager.triggerUpload()
+                        BufferManager.triggerUpload(System.currentTimeMillis().toString())
                     },
                     modifier = Modifier
                         .padding(start = 4.dp)

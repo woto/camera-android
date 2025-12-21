@@ -11,16 +11,25 @@ object BufferManager {
     private var lastTriggerTime = 0L
     private lateinit var outputDir: File
     private lateinit var deviceId: String
+    private var rotationProvider: (() -> Int)? = null
 
     fun initialize(context: android.content.Context) {
         outputDir = context.cacheDir
         deviceId = DeviceIdentity.getDeviceId(context)
     }
 
+    fun setRotationProvider(provider: () -> Int) {
+        rotationProvider = provider
+    }
+
     fun triggerUpload(triggerTimestamp: String? = null) {
         if (!::outputDir.isInitialized) {
             Log.e(TAG, "BufferManager not initialized!")
             return
+        }
+
+        rotationProvider?.invoke()?.let { latest ->
+            CircularBuffer.rotationDegrees = latest
         }
         
         val now = System.currentTimeMillis()

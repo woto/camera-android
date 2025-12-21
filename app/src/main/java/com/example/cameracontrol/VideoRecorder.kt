@@ -111,7 +111,7 @@ class VideoRecorder(
                 val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
                      CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
                 }
-                val rotation = cameraInfo?.getSensorRotationDegrees() ?: 90
+                val rotation = cameraInfo?.getSensorRotationDegrees(currentDisplayRotation()) ?: 90
                 CircularBuffer.rotationDegrees = rotation
                 Log.d(TAG, "Camera Rotation Set: $rotation")
 
@@ -134,6 +134,8 @@ class VideoRecorder(
                     preview,
                     encodingPreview
                 )
+
+                BufferManager.setRotationProvider { currentRotationDegrees() }
                 
                 isRecording = true
                 startEncodingLoop()         // Video Loop
@@ -466,6 +468,25 @@ class VideoRecorder(
         try {
             shutterSound.release()
         } catch (_: Exception) { }
+    }
+
+    private fun currentRotationDegrees(): Int {
+        return try {
+            camera?.cameraInfo?.getSensorRotationDegrees(currentDisplayRotation())
+                ?: CircularBuffer.rotationDegrees
+        } catch (_: Exception) {
+            CircularBuffer.rotationDegrees
+        }
+    }
+
+    private fun currentDisplayRotation(): Int {
+        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            context.display?.rotation ?: Surface.ROTATION_0
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.rotation
+        }
     }
 
     fun setLinearZoom(value: Float) {
