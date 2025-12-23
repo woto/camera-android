@@ -1,5 +1,7 @@
 package com.example.cameracontrol
 
+import android.content.Context
+
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -24,6 +26,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -132,7 +135,7 @@ fun CameraScreen() {
     }
 
     val recorder = cameraService?.getRecorder()
-    var zoomLinear by remember { mutableFloatStateOf(0f) }
+    var zoomLinear by rememberSaveable { mutableFloatStateOf(0f) }
 
     // Debounce zoom updates to avoid overloading camera control
     LaunchedEffect(zoomLinear) {
@@ -199,29 +202,18 @@ fun CameraScreen() {
             }
 
             // Bottom controls: zoom + trigger
-            Row(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                
-                // Toggle Logs Button
-                Button(
-                    onClick = { showLogs = !showLogs },
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
-                    Text(if (showLogs) "Hide Logs" else "Show Logs")
-                }
-
+                // Zoom Control (Full Width)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xCC1E1E1E)),
                     elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 12.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
@@ -240,15 +232,28 @@ fun CameraScreen() {
                     }
                 }
 
-                Button(
-                    onClick = {
-                        AppLogger.log("Manual Trigger Clicked")
-                        BufferManager.triggerUpload(System.currentTimeMillis().toString())
-                    },
-                    modifier = Modifier
-                        .padding(start = 4.dp)
+                // Action Buttons Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Simulate")
+                    // Toggle Logs Button
+                    Button(
+                        onClick = { showLogs = !showLogs },
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Text(if (showLogs) "Hide Logs" else "Show Logs")
+                    }
+
+                    Button(
+                        onClick = {
+                            AppLogger.log("Manual Trigger Clicked")
+                            BufferManager.triggerUpload(System.currentTimeMillis().toString())
+                        },
+                        modifier = Modifier.weight(1f).padding(start = 8.dp)
+                    ) {
+                        Text("Simulate")
+                    }
                 }
             }
         }
