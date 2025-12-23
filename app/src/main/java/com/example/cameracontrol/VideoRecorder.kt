@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import android.view.OrientationEventListener
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
@@ -51,6 +52,8 @@ class VideoRecorder(
         // Preload to avoid latency on first play
         load(MediaActionSound.START_VIDEO_RECORDING)
     }
+    @Volatile private var lastKnownDisplayRotation: Int? = null
+    private var orientationListener: OrientationEventListener? = null
     
     companion object {
         private const val TAG = "VideoRecorder"
@@ -88,6 +91,8 @@ class VideoRecorder(
         cameraProviderFuture.addListener({
             AppLogger.log("Camera Provider Ready")
             cameraProvider = cameraProviderFuture.get()
+
+            startOrientationListenerIfNeeded()
             
             // 1. UI Preview (Viewfinder)
             val uiProvider = boundPreviewProvider ?: headlessSurfaceProvider
@@ -111,7 +116,11 @@ class VideoRecorder(
                 val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
                      CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
                 }
-                val rotation = cameraInfo?.getSensorRotationDegrees(currentDisplayRotation()) ?: 90
+                val displayRot = safeDisplayRotation()
+                val rotation = cameraInfo?.let { info ->
+                    val disp = displayRot ?: lastKnownDisplayRotation
+                    disp?.let { info.getSensorRotationDegrees(it) } ?: info.getSensorRotationDegrees()
+                } ?: 90
                 CircularBuffer.rotationDegrees = rotation
                 Log.d(TAG, "Camera Rotation Set: $rotation")
 
@@ -468,24 +477,59 @@ class VideoRecorder(
         try {
             shutterSound.release()
         } catch (_: Exception) { }
+        try {
+            orientationListener?.disable()
+        } catch (_: Exception) { }
     }
 
     private fun currentRotationDegrees(): Int {
         return try {
-            camera?.cameraInfo?.getSensorRotationDegrees(currentDisplayRotation())
-                ?: CircularBuffer.rotationDegrees
+            val info = camera?.cameraInfo ?: return CircularBuffer.rotationDegrees
+            val disp = safeDisplayRotation() ?: lastKnownDisplayRotation
+            disp?.let { info.getSensorRotationDegrees(it) } ?: info.getSensorRotationDegrees()
         } catch (_: Exception) {
             CircularBuffer.rotationDegrees
         }
     }
 
-    private fun currentDisplayRotation(): Int {
+    private fun safeDisplayRotation(): Int? {
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            context.display?.rotation ?: Surface.ROTATION_0
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.rotation
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+        return try {
+            val rotation = lastKnownDisplayRotation ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.display?.rotation
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay?.rotation
+            } ?: displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
+
+            rotation?.also { lastKnownDisplayRotation = it }
+        } catch (_: Exception) {
+            lastKnownDisplayRotation
+        }
+    }
+
+    private fun startOrientationListenerIfNeeded() {
+        if (orientationListener != null) return
+
+        orientationListener = object : OrientationEventListener(context.applicationContext) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                // Map raw degrees to Surface rotation buckets
+                val rot = when (orientation) {
+                    in 45..134 -> Surface.ROTATION_90
+                    in 135..224 -> Surface.ROTATION_180
+                    in 225..314 -> Surface.ROTATION_270
+                    else -> Surface.ROTATION_0
+                }
+                if (rot != lastKnownDisplayRotation) {
+                    lastKnownDisplayRotation = rot
+                }
+            }
+        }.also { listener ->
+            try {
+                if (listener.canDetectOrientation()) listener.enable()
+            } catch (_: Exception) { }
         }
     }
 
