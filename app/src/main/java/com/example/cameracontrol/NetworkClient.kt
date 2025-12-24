@@ -37,6 +37,9 @@ object NetworkClient {
     val connectionStatus = _connectionStatus.asStateFlow()
 
     private var currentRoomId: String? = null
+    
+    // Public getter for current room ID
+    fun getCurrentRoomId(): String? = currentRoomId
 
     @Synchronized
     fun connectWebSocket(roomId: String? = null) {
@@ -159,7 +162,7 @@ object NetworkClient {
         AppLogger.log("Subscribing to RecordingChannel (Room=${roomId ?: "Public"})...")
     }
 
-    fun uploadFile(file: File, remoteFileName: String, timestamp: String?, onComplete: () -> Unit) {
+    fun uploadFile(file: File, remoteFileName: String, timestamp: String?, room: String? = null, onComplete: () -> Unit) {
         val mediaType = "video/mp4".toMediaType()
         val requestBodyBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -169,6 +172,7 @@ object NetworkClient {
                 file.asRequestBody(mediaType)
             )
         timestamp?.let { requestBodyBuilder.addFormDataPart("timestamp", it) }
+        room?.let { requestBodyBuilder.addFormDataPart("room", it) }
         val requestBody = requestBodyBuilder.build()
 
         AppLogger.log("Uploading: $remoteFileName...")

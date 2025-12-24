@@ -129,7 +129,8 @@ object BufferManager {
             AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
 
             // 5. Upload
-            NetworkClient.uploadFile(outputFile, outputFile.name, triggerTimestamp) {
+            val currentRoom = NetworkClient.getCurrentRoomId()
+            NetworkClient.uploadFile(outputFile, outputFile.name, triggerTimestamp, currentRoom) {
                 if (outputFile.exists()) outputFile.delete()
                 AppLogger.log("Upload & Cleanup Done")
             }
