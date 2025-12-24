@@ -36,14 +36,20 @@ object NetworkClient {
     private val _connectionStatus = MutableStateFlow(false)
     val connectionStatus = _connectionStatus.asStateFlow()
 
+    private var currentRoomId: String? = null
+
     @Synchronized
-    fun connectWebSocket() {
+    fun connectWebSocket(roomId: String? = null) {
+        if (roomId != null) {
+            currentRoomId = roomId
+        }
+        
         if (isConnecting || _connectionStatus.value) {
             AppLogger.log("WS already connecting/connected")
             return
         }
         isConnecting = true
-        AppLogger.log("Opening WS...")
+        AppLogger.log("Opening WS (Room: ${currentRoomId ?: "Default"})...")
 
         val request = Request.Builder()
             .url(WS_URL)
@@ -57,7 +63,7 @@ object NetworkClient {
                 _connectionStatus.value = true
                 isConnecting = false
                 handler.removeCallbacksAndMessages(null)
-                subscribeToChannel(webSocket)
+                subscribeToChannel(webSocket, currentRoomId)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -122,16 +128,35 @@ object NetworkClient {
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({
             AppLogger.log("Reconnecting WS...")
-            connectWebSocket()
+            connectWebSocket(currentRoomId) // Reconnect with same room
         }, RECONNECT_DELAY_MS)
     }
 
-    private fun subscribeToChannel(ws: WebSocket) {
+    @Synchronized
+    fun disconnectWebSocket() {
+        AppLogger.log("Disconnecting WS...")
+        handler.removeCallbacksAndMessages(null)
+        webSocket?.close(1000, "Service stopped")
+        webSocket = null
+        _connectionStatus.value = false
+        isConnecting = false
+        currentRoomId = null
+    }
+
+    private fun subscribeToChannel(ws: WebSocket, roomId: String?) {
         val subscribeMsg = JSONObject()
         subscribeMsg.put("command", "subscribe")
-        subscribeMsg.put("identifier", "{\"channel\":\"RecordingChannel\"}")
+        
+        // Construct Identifier: {"channel":"RecordingChannel", "room":"<id>"}
+        val identifier = JSONObject()
+        identifier.put("channel", "RecordingChannel")
+        if (!roomId.isNullOrBlank()) {
+            identifier.put("room", roomId)
+        }
+        
+        subscribeMsg.put("identifier", identifier.toString())
         ws.send(subscribeMsg.toString())
-        AppLogger.log("Subscribing to RecordingChannel...")
+        AppLogger.log("Subscribing to RecordingChannel (Room=${roomId ?: "Public"})...")
     }
 
     fun uploadFile(file: File, remoteFileName: String, timestamp: String?, onComplete: () -> Unit) {

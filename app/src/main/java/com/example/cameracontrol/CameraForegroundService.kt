@@ -48,6 +48,14 @@ class CameraForegroundService : LifecycleService() {
 
         when (intent?.action) {
             ACTION_STOP -> {
+                AppLogger.log("Svc Stopping...")
+                // Stop foreground mode first - this is critical!
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                // Disconnect WebSocket
+                NetworkClient.disconnectWebSocket()
+                // Reset flag so service can restart cleanly
+                hasStartedCamera = false
+                // Stop service
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -63,7 +71,9 @@ class CameraForegroundService : LifecycleService() {
                 return START_NOT_STICKY
             }
 
-            NetworkClient.connectWebSocket()
+            val roomId = intent?.getStringExtra("room_id")
+            AppLogger.log("Svc Starting (Room=$roomId)")
+            NetworkClient.connectWebSocket(roomId)
             recorder.startCamera()
             hasStartedCamera = true
         }
@@ -75,6 +85,8 @@ class CameraForegroundService : LifecycleService() {
         if (this::recorder.isInitialized) {
             recorder.stopCamera()
         }
+        NetworkClient.disconnectWebSocket()
+        hasStartedCamera = false
         wakeLock?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
