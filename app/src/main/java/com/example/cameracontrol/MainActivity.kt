@@ -21,17 +21,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.composed
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
@@ -472,8 +481,8 @@ fun CameraScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp)
-                    .background(Color.Black.copy(alpha = 0.5f))
+                    .height(220.dp)
+                    .background(Color.Black.copy(alpha = 0.6f))
                     .padding(8.dp)
                     .align(Alignment.TopCenter)
             ) {
@@ -491,82 +500,142 @@ fun CameraScreen(
             AppLogger.log("Build Time: " + BuildConfig.BUILD_TIME)
         }
 
-        // Bottom controls
-        Column(
+        // Top compact actions
+        Row(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Camera Toggle Button (Top of controls)
-            Button(
-                onClick = { 
-                    if (isCameraEnabled) {
-                        isCameraEnabled = false 
-                    } else {
-                        // Turning ON: Request Room Change first
-                        onEditRoom()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isCameraEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    if (isCameraEnabled) Strings.get("stop_camera", isRussian) 
-                    else Strings.get("start_camera", isRussian)
-                )
-            }
+            CompactButton(
+                text = if (showLogs) Strings.get("hide_logs", isRussian) else Strings.get("show_logs", isRussian),
+                onClick = { showLogs = !showLogs }
+            )
 
-            // Only show Zoom if camera active
-            if (isCameraEnabled) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xCC1E1E1E)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = "${Strings.get("zoom", isRussian)} ${(zoomLinear * 100).roundToInt()}%",
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
-                        Slider(
-                            value = zoomLinear,
-                            onValueChange = { value -> zoomLinear = value },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+            CompactButton(
+                text = Strings.get("simulate", isRussian),
+                onClick = {
+                    AppLogger.log("Manual Trigger Clicked")
+                    BufferManager.triggerUpload((System.currentTimeMillis() / 1000).toString())
+                }
+            )
+        }
+
+        // Right side zoom control to keep center clear
+        if (isCameraEnabled) {
+            val sliderInteraction = remember { MutableInteractionSource() }
+            var isDragging by remember { mutableStateOf(false) }
+
+            LaunchedEffect(sliderInteraction) {
+                sliderInteraction.interactions.collect { interaction ->
+                    when (interaction) {
+                        is DragInteraction.Start -> isDragging = true
+                        is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
                     }
                 }
             }
 
-            // Action Buttons Row
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight(0.9f)
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Button(
-                    onClick = { showLogs = !showLogs },
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
-                ) {
-                    Text(if (showLogs) Strings.get("hide_logs", isRussian) else Strings.get("show_logs", isRussian))
+                if (isDragging) {
+                    Text(
+                        text = "${Strings.get("zoom", isRussian)} ${(zoomLinear * 100).roundToInt()}%",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
                 }
 
-                Button(
-                    onClick = {
-                        AppLogger.log("Manual Trigger Clicked")
-                        BufferManager.triggerUpload((System.currentTimeMillis() / 1000).toString())
-                    },
-                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight(0.9f)
+                        .width(72.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(Strings.get("simulate", isRussian))
+                    Slider(
+                        value = zoomLinear,
+                        onValueChange = { value -> zoomLinear = value },
+                        interactionSource = sliderInteraction,
+                        modifier = Modifier
+                            .fillMaxHeight(0.9f)
+                            .verticalSlider()
+                            .scale(1.35f)
+                    )
                 }
             }
         }
+
+        // Centered toggle button keeps main view unobstructed
+        CompactButton(
+            text = if (isCameraEnabled) Strings.get("stop_camera", isRussian) else Strings.get("start_camera", isRussian),
+            onClick = { 
+                if (isCameraEnabled) {
+                    isCameraEnabled = false 
+                } else {
+                    // Turning ON: Request Room Change first
+                    onEditRoom()
+                }
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isCameraEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            ),
+            fontSize = 15.sp,
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 18.dp)
+        )
     }
+}
+
+@Composable
+private fun CompactButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+) {
+    Button(
+        onClick = onClick,
+        colors = colors,
+        contentPadding = contentPadding,
+        modifier = modifier.defaultMinSize(minWidth = 0.dp)
+    ) {
+        Text(text, fontSize = fontSize)
+    }
+}
+
+private fun Modifier.verticalSlider(): Modifier = composed {
+    this
+        .graphicsLayer {
+            rotationZ = -90f
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
+        }
+        .layout { measurable, constraints ->
+            // Force slider's unrotated width to match available height to lengthen the track
+            val targetWidth = constraints.maxHeight
+            val placeable = measurable.measure(
+                constraints.copy(
+                    minWidth = targetWidth,
+                    maxWidth = targetWidth
+                )
+            )
+            layout(placeable.height, placeable.width) {
+                // Center after rotation to avoid drift
+                placeable.place(
+                    x = -(placeable.width - placeable.height) / 2,
+                    y = (placeable.width - placeable.height) / 2
+                )
+            }
+        }
 }
