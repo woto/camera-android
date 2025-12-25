@@ -15,6 +15,7 @@ import android.os.SystemClock
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.Size
 import android.view.Surface
 import android.view.OrientationEventListener
 import androidx.camera.core.Camera
@@ -57,10 +58,10 @@ class VideoRecorder(
     
     companion object {
         private const val TAG = "VideoRecorder"
-        // 720p is good for performance/quality balance
-        private const val WIDTH = 1280
-        private const val HEIGHT = 720
-        private const val BIT_RATE = 2_500_000 // 2.5 Mbps
+        // Push encoder up to 1080p for better clarity (devices that can't handle it should be rare)
+        private const val WIDTH = 1920
+        private const val HEIGHT = 1080
+        private const val BIT_RATE = 10_000_000 // 10 Mbps
         private const val FRAME_RATE = 30
         private const val I_FRAME_INTERVAL = 1 // Keyframe every 1 second for easier cutting
         
@@ -97,6 +98,7 @@ class VideoRecorder(
             // 1. UI Preview (Viewfinder)
             val uiProvider = boundPreviewProvider ?: headlessSurfaceProvider
             preview = Preview.Builder()
+                .setTargetResolution(Size(WIDTH, HEIGHT))
                 .build()
                 .also { it.setSurfaceProvider(uiProvider) }
 
@@ -107,6 +109,7 @@ class VideoRecorder(
             // 3. Recorder Preview (Feeds the Encoder)
             encodingPreview = Preview.Builder()
                 .setTargetName("EncodingPreview")
+                .setTargetResolution(Size(WIDTH, HEIGHT))
                 .build()
 
             // We need to bridge the Encoder's Surface to this Preview
@@ -223,6 +226,7 @@ class VideoRecorder(
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
+            format.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
 
             mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
