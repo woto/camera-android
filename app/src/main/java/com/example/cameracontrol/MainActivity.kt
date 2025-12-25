@@ -516,7 +516,7 @@ fun CameraScreen(
                 text = Strings.get("simulate", isRussian),
                 onClick = {
                     AppLogger.log("Manual Trigger Clicked")
-                    BufferManager.triggerUpload((System.currentTimeMillis() / 1000).toString())
+                    NetworkClient.manualTrigger((System.currentTimeMillis() / 1000).toString())
                 }
             )
         }

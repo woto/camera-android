@@ -119,6 +119,17 @@ object NetworkClient {
         })
     }
 
+    /**
+     * Manual trigger used by the UI (Simulate button) to mimic an incoming capture signal.
+     * This emits the same `messageFlash` event as a real WS 'capture' message and
+     * then invokes the buffer upload flow with the provided timestamp.
+     */
+    fun manualTrigger(triggerTimestamp: String? = null) {
+        _messageFlash.tryEmit(Unit)
+        AppLogger.log("Manual Trigger: emitting flash + starting upload")
+        BufferManager.triggerUpload(triggerTimestamp)
+    }
+
     private fun handleDisconnect() {
         _connectionStatus.value = false
         isConnecting = false
