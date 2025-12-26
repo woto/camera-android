@@ -1,6 +1,7 @@
 package com.example.cameracontrol
 
 import android.Manifest
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -145,10 +146,10 @@ object Strings {
         "debug_logs" to "Debug Logs:",
         "hide_logs" to "Hide Logs",
         "show_logs" to "Show Logs",
-        "simulate" to "Simulate",
+        "simulate" to "Save",
         "zoom" to "Zoom",
         "start_camera" to "Turn Camera ON",
-        "stop_camera" to "Turn Camera OFF",
+        "stop_camera" to "Exit",
         "camera_disabled" to "Camera is Disabled"
     )
 
@@ -168,10 +169,10 @@ object Strings {
         "debug_logs" to "Debug Логи:",
         "hide_logs" to "Скрыть логи",
         "show_logs" to "Показать логи",
-        "simulate" to "Симуляция",
+        "simulate" to "Записать",
         "zoom" to "Зум",
         "start_camera" to "Включить камеру",
-        "stop_camera" to "Выключить камеру",
+        "stop_camera" to "Выход",
         "camera_disabled" to "Камера выключена"
     )
 }
@@ -327,6 +328,7 @@ fun CameraScreen(
     onEditRoom: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
 
     // Toggle for Camera Service
@@ -444,7 +446,7 @@ fun CameraScreen(
         }
     }
     
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         if (isCameraEnabled && hasPermissions && recorder != null) {
             // Camera Preview
             AndroidView(
@@ -513,16 +515,27 @@ fun CameraScreen(
             )
 
             CompactButton(
-                text = Strings.get("simulate", isRussian),
+                text = if (isCameraEnabled) Strings.get("stop_camera", isRussian) else Strings.get("start_camera", isRussian),
                 onClick = {
-                    AppLogger.log("Manual Trigger Clicked")
-                    NetworkClient.manualTrigger((System.currentTimeMillis() / 1000).toString())
+                    if (isCameraEnabled) {
+                        val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
+                            action = CameraForegroundService.ACTION_STOP
+                        }
+                        context.startService(stopIntent)
+                        activity?.finishAndRemoveTask() ?: activity?.finish()
+                    } else {
+                        onEditRoom()
+                    }
                 }
             )
         }
 
         // Right side zoom control to keep center clear
         if (isCameraEnabled) {
+            val edgePadding = 16.dp
+            val minDimension = if (maxWidth < maxHeight) maxWidth else maxHeight
+            val zoomTrackHeight = (minDimension * 0.8f - edgePadding * 2)
+                .coerceAtLeast(0.dp)
             val sliderInteraction = remember { MutableInteractionSource() }
             var isDragging by remember { mutableStateOf(false) }
 
@@ -538,8 +551,8 @@ fun CameraScreen(
             Row(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .fillMaxHeight(0.9f)
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                    .padding(horizontal = 8.dp, vertical = edgePadding)
+                    .height(zoomTrackHeight),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -556,7 +569,7 @@ fun CameraScreen(
 
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight(0.9f)
+                        .fillMaxHeight()
                         .width(72.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -565,7 +578,7 @@ fun CameraScreen(
                         onValueChange = { value -> zoomLinear = value },
                         interactionSource = sliderInteraction,
                         modifier = Modifier
-                            .fillMaxHeight(0.9f)
+                            .fillMaxHeight()
                             .verticalSlider()
                             .scale(1.35f)
                     )
@@ -573,20 +586,15 @@ fun CameraScreen(
             }
         }
 
-        // Centered toggle button keeps main view unobstructed
+        // Centered simulate button keeps main view unobstructed
         CompactButton(
-            text = if (isCameraEnabled) Strings.get("stop_camera", isRussian) else Strings.get("start_camera", isRussian),
+            text = Strings.get("simulate", isRussian),
             onClick = { 
-                if (isCameraEnabled) {
-                    isCameraEnabled = false 
-                } else {
-                    // Turning ON: Request Room Change first
-                    onEditRoom()
-                }
+                AppLogger.log("Trigger POST Clicked")
+                val roomId = prefs.getString("room_id", null)
+                NetworkClient.sendTrigger(roomId)
             },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isCameraEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            ),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             fontSize = 15.sp,
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
             modifier = Modifier

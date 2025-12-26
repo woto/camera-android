@@ -6,6 +6,7 @@ import android.os.Looper
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -128,6 +129,36 @@ object NetworkClient {
         _messageFlash.tryEmit(Unit)
         AppLogger.log("Manual Trigger: emitting flash + starting upload")
         BufferManager.triggerUpload(triggerTimestamp)
+    }
+
+    fun sendTrigger(roomId: String?) {
+        val safeRoom = roomId?.takeIf { it.isNotBlank() } ?: "000000"
+        val jsonBody = JSONObject().put("room", safeRoom).toString()
+        val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
+
+        AppLogger.log("Trigger POST: room=$safeRoom")
+
+        val request = Request.Builder()
+            .url("$BASE_URL/recorder/trigger")
+            .post(requestBody)
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                AppLogger.log("Trigger Failed: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (response.isSuccessful) {
+                    AppLogger.log("Trigger Sent")
+                } else {
+                    AppLogger.log("Trigger Error: ${response.code}")
+                }
+                response.close()
+            }
+        })
     }
 
     private fun handleDisconnect() {
