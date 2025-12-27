@@ -20,7 +20,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_volleyball"
-        android:label="Camera Loop"
+        android:label="Volley Cam"
         android:roundIcon="@drawable/ic_volleyball"
         android:supportsRtl="true"
         android:theme="@style/Theme.CameraControl"
