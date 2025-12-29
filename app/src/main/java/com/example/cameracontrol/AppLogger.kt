@@ -7,6 +7,8 @@ object AppLogger {
     val logs = mutableStateListOf<String>()
 
     fun log(msg: String) {
+        if (!BuildConfig.DEBUG) return
+
         val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         val formatted = "$time: $msg"
         

@@ -14,6 +14,8 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class CameraForegroundService : LifecycleService() {
     companion object {
@@ -21,6 +23,9 @@ class CameraForegroundService : LifecycleService() {
         const val NOTIFICATION_ID = 1
         const val ACTION_START = "com.example.cameracontrol.START"
         const val ACTION_STOP = "com.example.cameracontrol.STOP"
+
+        private val _foregroundState = MutableStateFlow(false)
+        val foregroundState: StateFlow<Boolean> = _foregroundState
     }
 
     inner class CameraBinder : Binder() {
@@ -38,6 +43,7 @@ class CameraForegroundService : LifecycleService() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
+        _foregroundState.value = true
         acquireWakeLock()
         recorder = VideoRecorder(applicationContext, this)
     }
@@ -51,6 +57,7 @@ class CameraForegroundService : LifecycleService() {
                 AppLogger.log("Svc Stopping...")
                 // Stop foreground mode first - this is critical!
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                _foregroundState.value = false
                 // Disconnect WebSocket
                 NetworkClient.disconnectWebSocket()
                 // Reset flag so service can restart cleanly
@@ -59,7 +66,10 @@ class CameraForegroundService : LifecycleService() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            else -> startForeground(NOTIFICATION_ID, buildNotification())
+            else -> {
+                startForeground(NOTIFICATION_ID, buildNotification())
+                _foregroundState.value = true
+            }
         }
 
         if (!hasStartedCamera) {
@@ -67,6 +77,7 @@ class CameraForegroundService : LifecycleService() {
             val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (!cameraGranted || !audioGranted) {
                 AppLogger.log("Foreground service missing permissions, stopping")
+                _foregroundState.value = false
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -87,6 +98,7 @@ class CameraForegroundService : LifecycleService() {
         }
         NetworkClient.disconnectWebSocket()
         hasStartedCamera = false
+        _foregroundState.value = false
         wakeLock?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }

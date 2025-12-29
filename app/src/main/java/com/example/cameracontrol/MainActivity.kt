@@ -1,12 +1,11 @@
 package com.example.cameracontrol
 
+import android.content.ComponentName
 import android.Manifest
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.composed
@@ -146,11 +146,13 @@ object Strings {
         "debug_logs" to "Debug Logs:",
         "hide_logs" to "Hide Logs",
         "show_logs" to "Show Logs",
-        "simulate" to "Save",
+        "simulate_save" to "Save Recording",
         "zoom" to "Zoom",
-        "start_camera" to "Turn Camera ON",
-        "stop_camera" to "Exit",
-        "camera_disabled" to "Camera is Disabled"
+        "simulate_save" to "Save Recording",
+        "zoom" to "Zoom",
+        "exit" to "Exit",
+        "privacy_disclaimer" to "By tapping OK, you agree to our",
+        "privacy_link" to "Privacy Policy"
     )
 
     private val mapRu = mapOf(
@@ -169,11 +171,13 @@ object Strings {
         "debug_logs" to "Debug Логи:",
         "hide_logs" to "Скрыть логи",
         "show_logs" to "Показать логи",
-        "simulate" to "Записать",
+        "simulate_save" to "Сохранить запись",
         "zoom" to "Зум",
-        "start_camera" to "Включить камеру",
-        "stop_camera" to "Выход",
-        "camera_disabled" to "Камера выключена"
+        "simulate_save" to "Сохранить запись",
+        "zoom" to "Зум",
+        "exit" to "Выход",
+        "privacy_disclaimer" to "Нажимая ОК, вы принимаете",
+        "privacy_link" to "Политику конфиденциальности"
     )
 }
 
@@ -261,6 +265,30 @@ fun IntroScreen(
             modifier = Modifier.padding(bottom = 32.dp)
         )
 
+        val uriHandler = LocalUriHandler.current
+        
+        Column(
+            modifier = Modifier.padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = Strings.get("privacy_disclaimer", isRussian),
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+            TextButton(
+                onClick = { uriHandler.openUri("https://volleycam.com/privacy") },
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Text(
+                    text = Strings.get("privacy_link", isRussian),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
         Button(
             onClick = onNext,
             modifier = Modifier.fillMaxWidth().height(50.dp)
@@ -276,6 +304,7 @@ fun RoomIdScreen(
     onNext: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
     var roomId by remember { mutableStateOf(prefs.getString("room_id", "") ?: "") }
     
@@ -331,11 +360,6 @@ fun CameraScreen(
     val activity = context as? Activity
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
 
-    // Toggle for Camera Service
-    // We default to true because if they came from RoomID, they want to start.
-    // If they toggle it off, they stay here safely.
-    var isCameraEnabled by rememberSaveable { mutableStateOf(true) }
-
     // Permission State
     val hasPermissionsInitial = remember {
         ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
@@ -368,19 +392,14 @@ fun CameraScreen(
 
     var cameraService by remember { mutableStateOf<CameraForegroundService?>(null) }
     var isBound by remember { mutableStateOf(false) }
+    var wasBound by remember { mutableStateOf(false) }
+    var isExiting by remember { mutableStateOf(false) }
+    var wasForegroundRecording by remember { mutableStateOf(false) }
+    val isForegroundRecording by CameraForegroundService.foregroundState.collectAsState()
 
     // Handle Service Binding based on isCameraEnabled and permissions
-    DisposableEffect(hasPermissions, isCameraEnabled) {
-        if (!hasPermissions || !isCameraEnabled) {
-            
-            // If explicit OFF, send stop command
-            if (!isCameraEnabled && hasPermissions) {
-                 val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
-                    action = CameraForegroundService.ACTION_STOP
-                }
-                context.startService(stopIntent) 
-            }
-            
+    DisposableEffect(hasPermissions) {
+        if (!hasPermissions) {
             cameraService = null
             isBound = false
             return@DisposableEffect onDispose { }
@@ -403,6 +422,9 @@ fun CameraScreen(
                 val binder = service as? CameraForegroundService.CameraBinder
                 cameraService = binder?.getService()
                 isBound = binder != null
+                if (isBound) {
+                    wasBound = true
+                }
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
@@ -426,6 +448,22 @@ fun CameraScreen(
     val recorder = cameraService?.getRecorder()
     var zoomLinear by rememberSaveable { mutableFloatStateOf(0f) }
 
+    LaunchedEffect(isBound, hasPermissions) {
+        if (isBound) {
+            wasBound = true
+        } else if (wasBound && hasPermissions) {
+            onEditRoom()
+        }
+    }
+
+    LaunchedEffect(isForegroundRecording, hasPermissions) {
+        if (isForegroundRecording) {
+            wasForegroundRecording = true
+        } else if (wasForegroundRecording && hasPermissions && !isExiting) {
+            onEditRoom()
+        }
+    }
+
     LaunchedEffect(zoomLinear) {
         delay(60)
         recorder?.setLinearZoom(zoomLinear)
@@ -447,7 +485,7 @@ fun CameraScreen(
     }
     
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        if (isCameraEnabled && hasPermissions && recorder != null) {
+        if (hasPermissions && recorder != null) {
             // Camera Preview
             AndroidView(
                 factory = { ctx ->
@@ -461,10 +499,6 @@ fun CameraScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
-        } else if (!isCameraEnabled) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(Strings.get("camera_disabled", isRussian), color = Color.White)
-            }
         } else if (!hasPermissions) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(Strings.get("camera_permissions_msg", isRussian), color = Color.White)
@@ -515,23 +549,20 @@ fun CameraScreen(
             )
 
             CompactButton(
-                text = if (isCameraEnabled) Strings.get("stop_camera", isRussian) else Strings.get("start_camera", isRussian),
+                text = Strings.get("exit", isRussian),
                 onClick = {
-                    if (isCameraEnabled) {
-                        val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
-                            action = CameraForegroundService.ACTION_STOP
-                        }
-                        context.startService(stopIntent)
-                        activity?.finishAndRemoveTask() ?: activity?.finish()
-                    } else {
-                        onEditRoom()
+                    isExiting = true
+                    val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
+                        action = CameraForegroundService.ACTION_STOP
                     }
+                    context.startService(stopIntent)
+                    activity?.finishAndRemoveTask() ?: activity?.finish()
                 }
             )
         }
 
         // Right side zoom control to keep center clear
-        if (isCameraEnabled) {
+        if (recorder != null) {
             val edgePadding = 16.dp
             val minDimension = if (maxWidth < maxHeight) maxWidth else maxHeight
             val zoomTrackHeight = (minDimension * 0.8f - edgePadding * 2)
@@ -588,11 +619,15 @@ fun CameraScreen(
 
         // Centered simulate button keeps main view unobstructed
         CompactButton(
-            text = Strings.get("simulate", isRussian),
+            text = Strings.get("simulate_save", isRussian),
             onClick = { 
-                AppLogger.log("Trigger POST Clicked")
-                val roomId = prefs.getString("room_id", null)
-                NetworkClient.sendTrigger(roomId)
+                if (recorder == null) {
+                    onEditRoom()
+                } else {
+                    AppLogger.log("Trigger POST Clicked")
+                    val roomId = prefs.getString("room_id", null)
+                    NetworkClient.sendTrigger(roomId)
+                }
             },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             fontSize = 15.sp,
