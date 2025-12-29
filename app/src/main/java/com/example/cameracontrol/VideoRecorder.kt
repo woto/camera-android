@@ -112,6 +112,7 @@ class VideoRecorder(
                 .setTargetName("EncodingPreview")
                 .setTargetResolution(Size(WIDTH, HEIGHT))
                 .build()
+            updateEncodingTargetRotation()
 
             // We need to bridge the Encoder's Surface to this Preview
             // Once the codec is configured, inputSurface is ready.
@@ -510,7 +511,7 @@ class VideoRecorder(
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
         val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
         return try {
-            val rotation = lastKnownDisplayRotation ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 context.display?.rotation
             } else {
                 @Suppress("DEPRECATION")
@@ -529,22 +530,21 @@ class VideoRecorder(
         orientationListener = object : OrientationEventListener(context.applicationContext) {
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
-                // Map raw degrees to Surface rotation buckets
-                val rot = when (orientation) {
-                    in 45..134 -> Surface.ROTATION_90
-                    in 135..224 -> Surface.ROTATION_180
-                    in 225..314 -> Surface.ROTATION_270
-                    else -> Surface.ROTATION_0
-                }
-                if (rot != lastKnownDisplayRotation) {
-                    lastKnownDisplayRotation = rot
-                }
+                updateEncodingTargetRotation()
             }
         }.also { listener ->
             try {
                 if (listener.canDetectOrientation()) listener.enable()
             } catch (_: Exception) { }
         }
+    }
+
+    private fun updateEncodingTargetRotation() {
+        val rot = safeDisplayRotation() ?: return
+        if (rot != lastKnownDisplayRotation) {
+            lastKnownDisplayRotation = rot
+        }
+        encodingPreview?.targetRotation = rot
     }
 
     fun setLinearZoom(value: Float) {
