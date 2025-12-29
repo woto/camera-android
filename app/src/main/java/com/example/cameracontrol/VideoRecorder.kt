@@ -54,6 +54,7 @@ class VideoRecorder(
         load(MediaActionSound.START_VIDEO_RECORDING)
     }
     @Volatile private var lastKnownDisplayRotation: Int? = null
+    @Volatile private var lastKnownRotationDegrees: Int? = null
     private var orientationListener: OrientationEventListener? = null
     
     companion object {
@@ -115,17 +116,25 @@ class VideoRecorder(
             // We need to bridge the Encoder's Surface to this Preview
             // Once the codec is configured, inputSurface is ready.
             encodingPreview?.setSurfaceProvider { request ->
-                // Capture rotation
-                val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
-                     CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
+                request.setTransformationInfoListener(executor) { info ->
+                    lastKnownRotationDegrees = info.rotationDegrees
+                    CircularBuffer.rotationDegrees = info.rotationDegrees
+                    Log.d(TAG, "CameraX rotationDegrees: ${info.rotationDegrees}")
                 }
-                val displayRot = safeDisplayRotation()
-                val rotation = cameraInfo?.let { info ->
-                    val disp = displayRot ?: lastKnownDisplayRotation
-                    disp?.let { info.getSensorRotationDegrees(it) } ?: info.getSensorRotationDegrees()
-                } ?: 90
-                CircularBuffer.rotationDegrees = rotation
-                Log.d(TAG, "Camera Rotation Set: $rotation")
+
+                // Fallback if we don't have a transformation update yet.
+                if (lastKnownRotationDegrees == null) {
+                    val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
+                        CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
+                    }
+                    val displayRot = safeDisplayRotation()
+                    val fallbackRotation = cameraInfo?.let { info ->
+                        val disp = displayRot ?: lastKnownDisplayRotation
+                        disp?.let { info.getSensorRotationDegrees(it) } ?: info.getSensorRotationDegrees()
+                    } ?: 90
+                    CircularBuffer.rotationDegrees = fallbackRotation
+                    Log.d(TAG, "Camera Rotation Fallback: $fallbackRotation")
+                }
 
                 if (inputSurface != null) {
                     request.provideSurface(inputSurface!!, executor) { result -> 
@@ -487,6 +496,7 @@ class VideoRecorder(
     }
 
     private fun currentRotationDegrees(): Int {
+        lastKnownRotationDegrees?.let { return it }
         return try {
             val info = camera?.cameraInfo ?: return CircularBuffer.rotationDegrees
             val disp = safeDisplayRotation() ?: lastKnownDisplayRotation
