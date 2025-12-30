@@ -61,6 +61,7 @@ class VideoRecorder(
     @Volatile private var sessionRotationDegrees: Int = 0
     @Volatile private var isShutterSoundReleased = false
     @Volatile private var lastKnownDisplayRotation: Int? = null
+    @Volatile private var lastPreviewRotation: Int? = null
     private var orientationListener: OrientationEventListener? = null
     
     companion object {
@@ -92,7 +93,7 @@ class VideoRecorder(
             startOrientationListenerIfNeeded()
 
             val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
-            val previewRotation = safeDisplayRotation() ?: rotation
+            val previewRotation = lastPreviewRotation ?: safeDisplayRotation() ?: rotation
             val targetSize = resolveTargetSize(rotation)
             activeWidth = targetSize.width
             activeHeight = targetSize.height
@@ -181,13 +182,14 @@ class VideoRecorder(
         }, ContextCompat.getMainExecutor(context))
     }
 
-    fun attachPreview(surfaceProvider: Preview.SurfaceProvider) {
+    fun attachPreview(surfaceProvider: Preview.SurfaceProvider, displayRotation: Int? = null) {
         boundPreviewProvider = surfaceProvider
         if (preview == null) {
             AppLogger.log("Preview not ready yet; will attach when camera starts")
         } else {
             preview?.setSurfaceProvider(surfaceProvider)
-            val rotation = safeDisplayRotation() ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
+            val rotation = displayRotation ?: safeDisplayRotation() ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
+            lastPreviewRotation = rotation
             preview?.targetRotation = rotation
             encodingPreview?.targetRotation = rotation
         }

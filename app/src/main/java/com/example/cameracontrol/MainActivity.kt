@@ -490,11 +490,11 @@ fun CameraScreen(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                        recorder.attachPreview(this.surfaceProvider)
+                        recorder.attachPreview(this.surfaceProvider, this.display?.rotation)
                     }
                 },
                 update = { view ->
-                    recorder.attachPreview(view.surfaceProvider)
+                    recorder.attachPreview(view.surfaceProvider, view.display?.rotation)
                 },
                 modifier = Modifier.fillMaxSize()
             )
