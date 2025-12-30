@@ -85,6 +85,7 @@ class VideoRecorder(
     fun startCamera(surfaceProvider: Preview.SurfaceProvider? = null) {
         surfaceProvider?.let { boundPreviewProvider = it }
         AppLogger.log("startCamera() called")
+        Log.d(TAG, "startCamera() boundPreviewProvider=${boundPreviewProvider != null}")
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             AppLogger.log("Camera Provider Ready")
@@ -97,7 +98,12 @@ class VideoRecorder(
             val targetSize = resolveTargetSize(rotation)
             activeWidth = targetSize.width
             activeHeight = targetSize.height
-            Log.d(TAG, "Starting Camera with Resolution: ${activeWidth}x${activeHeight} (rotation=$rotation)")
+            Log.d(
+                TAG,
+                "Starting Camera with Resolution: ${activeWidth}x${activeHeight} " +
+                    "(rotation=$rotation previewRotation=$previewRotation)"
+            )
+            AppLogger.log("Cam start: ${activeWidth}x${activeHeight} rot=$rotation prev=$previewRotation")
 
             val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
                 CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
@@ -113,6 +119,8 @@ class VideoRecorder(
             }
             CircularBuffer.rotationDegrees = sessionRotationDegrees
             CircularBuffer.clear()
+            Log.d(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
+            AppLogger.log("Session rotation=$sessionRotationDegrees")
 
             // 1. UI Preview (Viewfinder)
             // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
@@ -137,9 +145,10 @@ class VideoRecorder(
             // Once the codec is configured, inputSurface is ready.
             encodingPreview?.setSurfaceProvider { request ->
                 if (inputSurface != null) {
-                    request.provideSurface(inputSurface!!, executor) { result ->
+                    request.provideSurface(inputSurface!!, executor) { result -> 
                         // Surface release callback
                         Log.d(TAG, "Encoding surface request result: ${result.resultCode}")
+                        AppLogger.log("Encoding surface result: ${result.resultCode}")
                     }
                 } else {
                     request.willNotProvideSurface()
@@ -157,6 +166,7 @@ class VideoRecorder(
                     preview,
                     encodingPreview
                 )
+                Log.d(TAG, "Camera bound. preview=${preview != null} encodingPreview=${encodingPreview != null}")
                 
                 // If UI is already waiting, attach it
                 // If UI is already waiting, attach it
@@ -192,6 +202,8 @@ class VideoRecorder(
             lastPreviewRotation = rotation
             preview?.targetRotation = rotation
             encodingPreview?.targetRotation = rotation
+            Log.d(TAG, "attachPreview() rotation=$rotation")
+            AppLogger.log("attachPreview rot=$rotation")
         }
     }
 
@@ -252,6 +264,8 @@ class VideoRecorder(
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
             format.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+            Log.d(TAG, "Video codec format: $format")
+            AppLogger.log("Video codec: ${activeWidth}x${activeHeight} br=$BIT_RATE fps=$FRAME_RATE")
 
             mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -275,6 +289,8 @@ class VideoRecorder(
             format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
             format.setInteger(MediaFormat.KEY_CHANNEL_MASK, AudioFormat.CHANNEL_IN_MONO)
             format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+            Log.d(TAG, "Audio codec format: $format")
+            AppLogger.log("Audio codec: rate=$audioSampleRate br=$AUDIO_BIT_RATE")
 
             audioCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
             audioCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -356,10 +372,12 @@ class VideoRecorder(
                         Log.d(TAG, "Output format changed: $newFormat")
                         if (newFormat != null) {
                             CircularBuffer.videoFormat = newFormat
+                            AppLogger.log("Video format ready")
                         }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error in encoding loop", e)
+                    AppLogger.log("Video loop err: ${e.message}")
                 }
             }
         }
@@ -445,6 +463,7 @@ class VideoRecorder(
                         if (newFormat != null) {
                             CircularBuffer.audioFormat = newFormat
                             Log.d(TAG, "Audio Format Changed (Captured): $newFormat")
+                            AppLogger.log("Audio format ready")
                         }
                     }
                 }
@@ -477,6 +496,8 @@ class VideoRecorder(
     }
 
     fun stopCamera() {
+        Log.d(TAG, "stopCamera() called")
+        AppLogger.log("stopCamera")
         isRecording = false
         try {
             // Stop audio first to avoid blocking writes during teardown
@@ -502,6 +523,8 @@ class VideoRecorder(
         }
         cameraProvider?.unbindAll()
         CircularBuffer.clear()
+        Log.d(TAG, "Camera stopped; buffer cleared")
+        AppLogger.log("Camera stopped")
         // executor.shutdown() -> MOVED TO destroy()
         // Keep shutter sound alive for quick restarts; release in destroy().
         try {
@@ -553,13 +576,18 @@ class VideoRecorder(
         val sizes = map.getOutputSizes(SurfaceTexture::class.java) ?: return desired
         val desiredRatio = desired.width.toFloat() / desired.height.toFloat()
         val exact = sizes.firstOrNull { it.width == desired.width && it.height == desired.height }
-        if (exact != null) return desired
+        if (exact != null) {
+            Log.d(TAG, "Target size exact match: ${desired.width}x${desired.height}")
+            return desired
+        }
         val best = sizes
             .filter { abs(it.width.toFloat() / it.height.toFloat() - desiredRatio) < 0.01f }
             .maxByOrNull { it.width * it.height }
         if (best != null) {
+            Log.d(TAG, "Target size best match: ${best.width}x${best.height}")
             return Size(best.width, best.height)
         }
+        Log.d(TAG, "Target size fallback: ${WIDTH}x${HEIGHT}")
         return Size(WIDTH, HEIGHT)
     }
 
@@ -579,11 +607,13 @@ class VideoRecorder(
                 if (lastKnownDisplayRotation == displayRotation) return
                 lastKnownDisplayRotation = displayRotation
                 Log.d(TAG, "Rotation changed to $displayRotation. Restarting camera...")
+                AppLogger.log("Rotation change: $displayRotation")
                 try {
                     stopCamera()
                     startCamera(boundPreviewProvider)
                 } catch(e: Exception) {
                     Log.e(TAG, "Error restarting camera on rotation", e)
+                    AppLogger.log("Restart err: ${e.message}")
                 }
             }
         }.also { listener ->

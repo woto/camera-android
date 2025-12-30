@@ -144,8 +144,6 @@ object Strings {
         "camera_permissions_msg" to "Please grant camera and audio permissions to continue.",
         "starting_camera" to "Starting camera service...",
         "debug_logs" to "Debug Logs:",
-        "hide_logs" to "Hide Logs",
-        "show_logs" to "Show Logs",
         "simulate_save" to "Save Recording",
         "zoom" to "Zoom",
         "simulate_save" to "Save Recording",
@@ -169,8 +167,6 @@ object Strings {
         "camera_permissions_msg" to "Пожалуйста, предоставьте разрешения на камеру и аудио.",
         "starting_camera" to "Запуск сервиса камеры...",
         "debug_logs" to "Debug Логи:",
-        "hide_logs" to "Скрыть логи",
-        "show_logs" to "Показать логи",
         "simulate_save" to "Сохранить запись",
         "zoom" to "Зум",
         "simulate_save" to "Сохранить запись",
@@ -508,28 +504,6 @@ fun CameraScreen(
             }
         }
         
-        // UI Controls (Overlay)
-        // DEBUG LOGS OVERLAY
-        var showLogs by remember { mutableStateOf(false) }
-
-        if (showLogs) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(8.dp)
-                    .align(Alignment.TopCenter)
-            ) {
-                Text(Strings.get("debug_logs", isRussian), color = Color.White, fontSize = 14.sp)
-                LazyColumn(reverseLayout = false) {
-                    items(AppLogger.logs) { log ->
-                        Text(text = log, color = Color.Green, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-        
         // Log Build Time
         LaunchedEffect(Unit) {
             AppLogger.log("Build Time: " + BuildConfig.BUILD_TIME)
@@ -542,11 +516,6 @@ fun CameraScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            CompactButton(
-                text = if (showLogs) Strings.get("hide_logs", isRussian) else Strings.get("show_logs", isRussian),
-                onClick = { showLogs = !showLogs }
-            )
-
             CompactButton(
                 text = Strings.get("exit", isRussian),
                 onClick = {
