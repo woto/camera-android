@@ -28,13 +28,16 @@ object BufferManager {
             return
         }
 
+        AppLogger.log("triggerUpload() ts=${triggerTimestamp ?: "null"}")
         rotationProvider?.invoke()?.let { latest ->
             CircularBuffer.rotationDegrees = latest
         }
         
         val now = System.currentTimeMillis()
-        if (now - lastTriggerTime < 3000) {
-            Log.d(TAG, "Trigger debounced (too fast)")
+        val deltaMs = now - lastTriggerTime
+        if (deltaMs < 3000) {
+            Log.d(TAG, "Trigger debounced (too fast): ${deltaMs}ms since last")
+            AppLogger.log("Trigger debounced: ${deltaMs}ms")
             return
         }
         lastTriggerTime = now
@@ -147,15 +150,16 @@ object BufferManager {
             Log.d(TAG, "Muxer stopped and released")
             AppLogger.log("Muxer stopped")
             
-            Log.d(TAG, "Saved MP4: ${outputFile.length()} bytes")
-            AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
+        Log.d(TAG, "Saved MP4: ${outputFile.length()} bytes")
+        AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
 
-            // 5. Upload
-            val currentRoom = NetworkClient.getCurrentRoomId()
-            NetworkClient.uploadFile(outputFile, outputFile.name, triggerTimestamp, currentRoom) {
-                if (outputFile.exists()) outputFile.delete()
-                AppLogger.log("Upload & Cleanup Done")
-            }
+        // 5. Upload
+        val currentRoom = NetworkClient.getCurrentRoomId()
+        AppLogger.log("Upload start: ${outputFile.name} room=${currentRoom ?: "null"}")
+        NetworkClient.uploadFile(outputFile, outputFile.name, triggerTimestamp, currentRoom) {
+            if (outputFile.exists()) outputFile.delete()
+            AppLogger.log("Upload & Cleanup Done")
+        }
 
         } catch (e: Exception) {
             Log.e(TAG, "Muxing failed", e)

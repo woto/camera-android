@@ -29,6 +29,7 @@ import androidx.lifecycle.LifecycleOwner
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
 class VideoRecorder(
@@ -54,7 +55,7 @@ class VideoRecorder(
     private var torchState: Boolean? = null
     private val shutterSound: MediaActionSound = MediaActionSound().apply {
         // Preload to avoid latency on first play
-        load(MediaActionSound.START_VIDEO_RECORDING)
+        load(MediaActionSound.SHUTTER_CLICK)
     }
     private var activeWidth = WIDTH
     private var activeHeight = HEIGHT
@@ -62,7 +63,10 @@ class VideoRecorder(
     @Volatile private var isShutterSoundReleased = false
     @Volatile private var lastKnownDisplayRotation: Int? = null
     @Volatile private var lastPreviewRotation: Int? = null
+    @Volatile private var isScreenOn: Boolean = true
+    @Volatile private var isStarting = false
     private var orientationListener: OrientationEventListener? = null
+    private val isAudioStopping = AtomicBoolean(false)
     
     companion object {
         private const val TAG = "VideoRecorder"
@@ -84,110 +88,130 @@ class VideoRecorder(
     @Suppress("DEPRECATION")
     fun startCamera(surfaceProvider: Preview.SurfaceProvider? = null) {
         surfaceProvider?.let { boundPreviewProvider = it }
+        if (isStarting) {
+            AppLogger.log("startCamera() ignored: already starting")
+            return
+        }
+        if (isRecording) {
+            AppLogger.log("startCamera() ignored: already recording")
+            return
+        }
+        isStarting = true
         AppLogger.log("startCamera() called")
         Log.d(TAG, "startCamera() boundPreviewProvider=${boundPreviewProvider != null}")
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
-            AppLogger.log("Camera Provider Ready")
-            cameraProvider = cameraProviderFuture.get()
-
-            startOrientationListenerIfNeeded()
-
-            val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
-            val previewRotation = lastPreviewRotation ?: safeDisplayRotation() ?: rotation
-            val targetSize = resolveTargetSize(rotation)
-            activeWidth = targetSize.width
-            activeHeight = targetSize.height
-            Log.d(
-                TAG,
-                "Starting Camera with Resolution: ${activeWidth}x${activeHeight} " +
-                    "(rotation=$rotation previewRotation=$previewRotation)"
-            )
-            AppLogger.log("Cam start: ${activeWidth}x${activeHeight} rot=$rotation prev=$previewRotation")
-
-            val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
-                CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
-            }
-            val baseRotation = cameraInfo?.let { info ->
-                info.getSensorRotationDegrees(rotation)
-            } ?: 0
-            val needsLandscapeFlip = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
-            sessionRotationDegrees = if (needsLandscapeFlip) {
-                (baseRotation + 180) % 360
-            } else {
-                baseRotation
-            }
-            CircularBuffer.rotationDegrees = sessionRotationDegrees
-            CircularBuffer.clear()
-            Log.d(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
-            AppLogger.log("Session rotation=$sessionRotationDegrees")
-
-            // 1. UI Preview (Viewfinder)
-            // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
-            preview = Preview.Builder()
-                .setTargetResolution(targetSize)
-                .setTargetRotation(previewRotation)
-                .build()
-                // Don't set dummy provider here; wait for real one
-
-            // 2. Prepare Encoder & Input Surface
-            setupMediaCodec()       // Video
-            setupAudioMediaCodec()  // Audio
-            
-            // 3. Recorder Preview (Feeds the Encoder)
-            encodingPreview = Preview.Builder()
-                .setTargetName("EncodingPreview")
-                .setTargetResolution(targetSize)
-                .setTargetRotation(previewRotation)
-                .build()
-
-            // We need to bridge the Encoder's Surface to this Preview
-            // Once the codec is configured, inputSurface is ready.
-            encodingPreview?.setSurfaceProvider { request ->
-                if (inputSurface != null) {
-                    request.provideSurface(inputSurface!!, executor) { result -> 
-                        // Surface release callback
-                        Log.d(TAG, "Encoding surface request result: ${result.resultCode}")
-                        AppLogger.log("Encoding surface result: ${result.resultCode}")
-                    }
-                } else {
-                    request.willNotProvideSurface()
-                }
-            }
-
             try {
-                cameraProvider?.unbindAll()
-                // Bind both the UI preview and the Encoding preview
-                // If boundPreviewProvider is null, Preview will run but not show anything until attachPreview is called
-                AppLogger.log("Binding Camera UseCases...")
-                camera = cameraProvider?.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    encodingPreview
+                AppLogger.log("Camera Provider Ready")
+                cameraProvider = cameraProviderFuture.get()
+
+                startOrientationListenerIfNeeded()
+
+                val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
+                val previewRotation = lastPreviewRotation ?: safeDisplayRotation() ?: rotation
+                val targetSize = resolveTargetSize(rotation)
+                activeWidth = targetSize.width
+                activeHeight = targetSize.height
+                Log.d(
+                    TAG,
+                    "Starting Camera with Resolution: ${activeWidth}x${activeHeight} " +
+                        "(rotation=$rotation previewRotation=$previewRotation)"
                 )
-                Log.d(TAG, "Camera bound. preview=${preview != null} encodingPreview=${encodingPreview != null}")
-                
-                // If UI is already waiting, attach it
-                // If UI is already waiting, attach it
-                boundPreviewProvider?.let { 
-                    AppLogger.log("Attaching UI Surface to Preview")
-                    preview?.setSurfaceProvider(it)
+                AppLogger.log("Cam start: ${activeWidth}x${activeHeight} rot=$rotation prev=$previewRotation")
+
+                val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
+                    CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
+                }
+                val baseRotation = cameraInfo?.let { info ->
+                    info.getSensorRotationDegrees(rotation)
+                } ?: 0
+                val needsLandscapeFlip = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
+                sessionRotationDegrees = if (needsLandscapeFlip) {
+                    (baseRotation + 180) % 360
+                } else {
+                    baseRotation
+                }
+                CircularBuffer.rotationDegrees = sessionRotationDegrees
+                CircularBuffer.clear()
+                Log.d(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
+                AppLogger.log("Session rotation=$sessionRotationDegrees")
+
+                // 1. UI Preview (Viewfinder) - only when screen is on
+                // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
+                preview = if (isScreenOn) {
+                    Preview.Builder()
+                        .setTargetResolution(targetSize)
+                        .setTargetRotation(previewRotation)
+                        .build()
+                } else {
+                    null
                 }
 
-                BufferManager.setRotationProvider { sessionRotationDegrees }
+                // 2. Prepare Encoder & Input Surface
+                setupMediaCodec()       // Video
+                setupAudioMediaCodec()  // Audio
                 
-                isRecording = true
-                startEncodingLoop()         // Video Loop
-                // AppLogger.log("Starting Audio Loop...")
-                startAudioEncodingLoop()    // Audio Loop
-                
-                Log.d(TAG, "Camera and Recording started seamlessly")
-                AppLogger.log("Camera Bound & Started")
-                
-            } catch (exc: Exception) {
-                Log.e(TAG, "Use case binding failed", exc)
-                AppLogger.log("Camera Bind Failed: ${exc.message}")
+                // 3. Recorder Preview (Feeds the Encoder)
+                encodingPreview = Preview.Builder()
+                    .setTargetName("EncodingPreview")
+                    .setTargetResolution(targetSize)
+                    .setTargetRotation(previewRotation)
+                    .build()
+
+                // We need to bridge the Encoder's Surface to this Preview
+                // Once the codec is configured, inputSurface is ready.
+                encodingPreview?.setSurfaceProvider { request ->
+                    if (inputSurface != null) {
+                        request.provideSurface(inputSurface!!, executor) { result -> 
+                            // Surface release callback
+                            Log.d(TAG, "Encoding surface request result: ${result.resultCode}")
+                            AppLogger.log("Encoding surface result: ${result.resultCode}")
+                        }
+                    } else {
+                        request.willNotProvideSurface()
+                    }
+                }
+
+                try {
+                    cameraProvider?.unbindAll()
+                    // Bind both the UI preview and the Encoding preview
+                    // If boundPreviewProvider is null, Preview will run but not show anything until attachPreview is called
+                    AppLogger.log("Binding Camera UseCases...")
+                    val useCases = if (preview != null) {
+                        arrayOf(preview, encodingPreview)
+                    } else {
+                        arrayOf(encodingPreview)
+                    }
+                    camera = cameraProvider?.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        *useCases
+                    )
+                    Log.d(TAG, "Camera bound. preview=${preview != null} encodingPreview=${encodingPreview != null}")
+                    
+                    // If UI is already waiting, attach it
+                    // If UI is already waiting, attach it
+                    boundPreviewProvider?.let { 
+                        AppLogger.log("Attaching UI Surface to Preview")
+                        preview?.setSurfaceProvider(it)
+                    }
+
+                    BufferManager.setRotationProvider { sessionRotationDegrees }
+                    
+                    isRecording = true
+                    startEncodingLoop()         // Video Loop
+                    // AppLogger.log("Starting Audio Loop...")
+                    startAudioEncodingLoop()    // Audio Loop
+                    
+                    Log.d(TAG, "Camera and Recording started seamlessly")
+                    AppLogger.log("Camera Bound & Started")
+                    
+                } catch (exc: Exception) {
+                    Log.e(TAG, "Use case binding failed", exc)
+                    AppLogger.log("Camera Bind Failed: ${exc.message}")
+                }
+            } finally {
+                isStarting = false
             }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -195,7 +219,12 @@ class VideoRecorder(
     fun attachPreview(surfaceProvider: Preview.SurfaceProvider, displayRotation: Int? = null) {
         boundPreviewProvider = surfaceProvider
         if (preview == null) {
-            AppLogger.log("Preview not ready yet; will attach when camera starts")
+            if (isScreenOn) {
+                AppLogger.log("Preview missing; restarting camera to attach UI")
+                startCamera(surfaceProvider)
+            } else {
+                AppLogger.log("Preview not ready; screen off, skip attach")
+            }
         } else {
             preview?.setSurfaceProvider(surfaceProvider)
             val rotation = displayRotation ?: safeDisplayRotation() ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
@@ -204,6 +233,18 @@ class VideoRecorder(
             encodingPreview?.targetRotation = rotation
             Log.d(TAG, "attachPreview() rotation=$rotation")
             AppLogger.log("attachPreview rot=$rotation")
+        }
+    }
+
+    fun setScreenOn(isOn: Boolean) {
+        if (isScreenOn == isOn) return
+        isScreenOn = isOn
+        AppLogger.log("Screen state: ${if (isOn) "ON" else "OFF"}")
+        try {
+            stopCamera()
+            startCamera(boundPreviewProvider)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error restarting camera on screen state change", e)
         }
     }
 
@@ -220,12 +261,24 @@ class VideoRecorder(
         val mainHandler = Handler(Looper.getMainLooper())
         mainHandler.post {
             try {
+                val wasEnabled = torchState == true
+                if (wasEnabled) {
+                    cam.cameraControl.enableTorch(false)
+                    torchState = false
+                }
                 cam.cameraControl.enableTorch(true)
+                torchState = true
                 if (!isShutterSoundReleased) {
-                    shutterSound.play(MediaActionSound.START_VIDEO_RECORDING)
+                    shutterSound.play(MediaActionSound.SHUTTER_CLICK)
                 }
                 mainHandler.postDelayed({
-                    cam.cameraControl.enableTorch(false)
+                    if (wasEnabled) {
+                        cam.cameraControl.enableTorch(true)
+                        torchState = true
+                    } else {
+                        cam.cameraControl.enableTorch(false)
+                        torchState = false
+                    }
                 }, durationMs.toLong())
             } catch (e: Exception) {
                 AppLogger.log("Torch error: ${e.message}")
@@ -258,6 +311,10 @@ class VideoRecorder(
 
     private fun setupMediaCodec() {
         try {
+            try {
+                inputSurface?.release()
+            } catch (_: Exception) { }
+            inputSurface = null
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, activeWidth, activeHeight)
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
@@ -283,6 +340,7 @@ class VideoRecorder(
     private fun setupAudioMediaCodec() {
         AppLogger.log("Setting up Audio Codec...")
         try {
+            isAudioStopping.set(false)
             audioSampleRate = resolveSampleRate()
             val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, audioSampleRate, AUDIO_CHANNEL_COUNT)
             format.setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE)
@@ -471,17 +529,41 @@ class VideoRecorder(
                Log.e(TAG, "Audio Loop Error", e)
                AppLogger.log("Audio Err: ${e.message}")
             } finally {
-                Log.d(TAG, "Stopping Audio Record")
-                try {
-                    audioRecord?.stop()
-                    audioRecord?.release()
-                    audioCodec?.stop()
-                    audioCodec?.release()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error stopping audio", e)
-                }
-                audioCodec = null
+                shutdownAudio("audio loop end")
             }
+        }
+    }
+
+    private fun shutdownAudio(reason: String) {
+        if (!isAudioStopping.compareAndSet(false, true)) {
+            return
+        }
+        Log.d(TAG, "Stopping Audio Record ($reason)")
+        try {
+            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                audioRecord?.stop()
+            }
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "Error stopping audio record", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping audio record", e)
+        } finally {
+            try {
+                audioRecord?.release()
+            } catch (_: Exception) { }
+            audioRecord = null
+        }
+        try {
+            audioCodec?.stop()
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "Error stopping audio codec", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping audio codec", e)
+        } finally {
+            try {
+                audioCodec?.release()
+            } catch (_: Exception) { }
+            audioCodec = null
         }
     }
 
@@ -499,21 +581,9 @@ class VideoRecorder(
         Log.d(TAG, "stopCamera() called")
         AppLogger.log("stopCamera")
         isRecording = false
-        try {
-            // Stop audio first to avoid blocking writes during teardown
-            audioRecord?.stop()
-        } catch (_: Exception) { }
-        try {
-            audioRecord?.release()
-        } catch (_: Exception) { }
-        audioRecord = null
-        try {
-            audioCodec?.stop()
-        } catch (_: Exception) { }
-        try {
-            audioCodec?.release()
-        } catch (_: Exception) { }
-        audioCodec = null
+        isStarting = false
+        // Stop audio first to avoid blocking writes during teardown
+        shutdownAudio("stopCamera")
         try {
             mediaCodec?.stop()
             mediaCodec?.release()
@@ -521,6 +591,10 @@ class VideoRecorder(
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        try {
+            inputSurface?.release()
+        } catch (_: Exception) { }
+        inputSurface = null
         cameraProvider?.unbindAll()
         CircularBuffer.clear()
         Log.d(TAG, "Camera stopped; buffer cleared")

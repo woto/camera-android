@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.os.Binder
 import android.os.Build
 import android.os.PowerManager
@@ -36,6 +38,15 @@ class CameraForegroundService : LifecycleService() {
     private lateinit var recorder: VideoRecorder
     private var wakeLock: PowerManager.WakeLock? = null
     private var hasStartedCamera = false
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!this@CameraForegroundService::recorder.isInitialized) return
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_ON -> recorder.setScreenOn(true)
+                Intent.ACTION_SCREEN_OFF -> recorder.setScreenOn(false)
+            }
+        }
+    }
 
     override fun onBind(intent: Intent): android.os.IBinder? = binder
 
@@ -46,6 +57,10 @@ class CameraForegroundService : LifecycleService() {
         _foregroundState.value = true
         acquireWakeLock()
         recorder = VideoRecorder(applicationContext, this)
+        registerReceiver(screenReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -100,6 +115,9 @@ class CameraForegroundService : LifecycleService() {
         hasStartedCamera = false
         _foregroundState.value = false
         wakeLock?.let { if (it.isHeld) it.release() }
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (_: Exception) { }
         super.onDestroy()
     }
 
