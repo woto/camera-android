@@ -92,6 +92,7 @@ class VideoRecorder(
             startOrientationListenerIfNeeded()
 
             val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
+            val previewRotation = safeDisplayRotation() ?: rotation
             val targetSize = resolveTargetSize(rotation)
             activeWidth = targetSize.width
             activeHeight = targetSize.height
@@ -100,9 +101,15 @@ class VideoRecorder(
             val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
                 CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
             }
-            sessionRotationDegrees = cameraInfo?.let { info ->
+            val baseRotation = cameraInfo?.let { info ->
                 info.getSensorRotationDegrees(rotation)
             } ?: 0
+            val needsLandscapeFlip = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
+            sessionRotationDegrees = if (needsLandscapeFlip) {
+                (baseRotation + 180) % 360
+            } else {
+                baseRotation
+            }
             CircularBuffer.rotationDegrees = sessionRotationDegrees
             CircularBuffer.clear()
 
@@ -110,7 +117,7 @@ class VideoRecorder(
             // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
             preview = Preview.Builder()
                 .setTargetResolution(targetSize)
-                .setTargetRotation(rotation)
+                .setTargetRotation(previewRotation)
                 .build()
                 // Don't set dummy provider here; wait for real one
 
@@ -122,7 +129,7 @@ class VideoRecorder(
             encodingPreview = Preview.Builder()
                 .setTargetName("EncodingPreview")
                 .setTargetResolution(targetSize)
-                .setTargetRotation(rotation)
+                .setTargetRotation(previewRotation)
                 .build()
 
             // We need to bridge the Encoder's Surface to this Preview
@@ -180,6 +187,9 @@ class VideoRecorder(
             AppLogger.log("Preview not ready yet; will attach when camera starts")
         } else {
             preview?.setSurfaceProvider(surfaceProvider)
+            val rotation = safeDisplayRotation() ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
+            preview?.targetRotation = rotation
+            encodingPreview?.targetRotation = rotation
         }
     }
 
