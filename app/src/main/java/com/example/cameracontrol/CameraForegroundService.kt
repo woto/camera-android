@@ -94,7 +94,7 @@ class CameraForegroundService : LifecycleService() {
 
     override fun onDestroy() {
         if (this::recorder.isInitialized) {
-            recorder.stopCamera()
+            recorder.destroy()
         }
         NetworkClient.disconnectWebSocket()
         hasStartedCamera = false

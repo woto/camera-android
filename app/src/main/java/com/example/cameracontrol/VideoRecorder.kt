@@ -53,13 +53,16 @@ class VideoRecorder(
         // Preload to avoid latency on first play
         load(MediaActionSound.START_VIDEO_RECORDING)
     }
+    @Volatile private var isShutterSoundReleased = false
     @Volatile private var lastKnownDisplayRotation: Int? = null
     @Volatile private var lastKnownRotationDegrees: Int? = null
     private var orientationListener: OrientationEventListener? = null
+
+    @Volatile private var lastRestartedRotation: Int? = null
     
     companion object {
         private const val TAG = "VideoRecorder"
-        // Push encoder up to 1080p for better clarity (devices that can't handle it should be rare)
+        // Push encoder up to 1080p for better clarity
         private const val WIDTH = 1920
         private const val HEIGHT = 1080
         private const val BIT_RATE = 10_000_000 // 10 Mbps
@@ -73,19 +76,8 @@ class VideoRecorder(
         private val PREFERRED_SAMPLE_RATES = listOf(48000, 44100, 32000, 16000)
     }
 
-    private val headlessSurfaceProvider: Preview.SurfaceProvider by lazy {
-        Preview.SurfaceProvider { request ->
-            val surfaceTexture = SurfaceTexture(0).apply {
-                setDefaultBufferSize(request.resolution.width, request.resolution.height)
-            }
-            val surface = Surface(surfaceTexture)
-            request.provideSurface(surface, executor) {
-                surface.release()
-                surfaceTexture.release()
-            }
-        }
-    }
 
+    @Suppress("DEPRECATION")
     fun startCamera(surfaceProvider: Preview.SurfaceProvider? = null) {
         surfaceProvider?.let { boundPreviewProvider = it }
         AppLogger.log("startCamera() called")
@@ -95,13 +87,17 @@ class VideoRecorder(
             cameraProvider = cameraProviderFuture.get()
 
             startOrientationListenerIfNeeded()
-            
+
+            // Prefer a stable 1920x1080 stream and rotate via metadata.
+            val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
+
             // 1. UI Preview (Viewfinder)
-            val uiProvider = boundPreviewProvider ?: headlessSurfaceProvider
+            // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
             preview = Preview.Builder()
                 .setTargetResolution(Size(WIDTH, HEIGHT))
+                .setTargetRotation(rotation)
                 .build()
-                .also { it.setSurfaceProvider(uiProvider) }
+                // Don't set dummy provider here; wait for real one
 
             // 2. Prepare Encoder & Input Surface
             setupMediaCodec()       // Video
@@ -111,8 +107,8 @@ class VideoRecorder(
             encodingPreview = Preview.Builder()
                 .setTargetName("EncodingPreview")
                 .setTargetResolution(Size(WIDTH, HEIGHT))
+                .setTargetRotation(rotation)
                 .build()
-            updateEncodingTargetRotation()
 
             // We need to bridge the Encoder's Surface to this Preview
             // Once the codec is configured, inputSurface is ready.
@@ -150,25 +146,35 @@ class VideoRecorder(
             try {
                 cameraProvider?.unbindAll()
                 // Bind both the UI preview and the Encoding preview
+                // If boundPreviewProvider is null, Preview will run but not show anything until attachPreview is called
+                AppLogger.log("Binding Camera UseCases...")
                 camera = cameraProvider?.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     encodingPreview
                 )
+                
+                // If UI is already waiting, attach it
+                // If UI is already waiting, attach it
+                boundPreviewProvider?.let { 
+                    AppLogger.log("Attaching UI Surface to Preview")
+                    preview?.setSurfaceProvider(it)
+                }
 
                 BufferManager.setRotationProvider { currentRotationDegrees() }
                 
                 isRecording = true
                 startEncodingLoop()         // Video Loop
-                AppLogger.log("Starting Audio Loop...")
+                // AppLogger.log("Starting Audio Loop...")
                 startAudioEncodingLoop()    // Audio Loop
                 
                 Log.d(TAG, "Camera and Recording started seamlessly")
+                AppLogger.log("Camera Bound & Started")
                 
             } catch (exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
-                AppLogger.log("Camera Error: ${exc.message}")
+                AppLogger.log("Camera Bind Failed: ${exc.message}")
             }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -196,7 +202,9 @@ class VideoRecorder(
         mainHandler.post {
             try {
                 cam.cameraControl.enableTorch(true)
-                shutterSound.play(MediaActionSound.START_VIDEO_RECORDING)
+                if (!isShutterSoundReleased) {
+                    shutterSound.play(MediaActionSound.START_VIDEO_RECORDING)
+                }
                 mainHandler.postDelayed({
                     cam.cameraControl.enableTorch(false)
                 }, durationMs.toLong())
@@ -487,12 +495,27 @@ class VideoRecorder(
         }
         cameraProvider?.unbindAll()
         CircularBuffer.clear()
-        executor.shutdown()
+        // executor.shutdown() -> MOVED TO destroy()
+        // Keep shutter sound alive for quick restarts; release in destroy().
         try {
-            shutterSound.release()
+        } catch (_: Exception) { }
+    }
+
+    fun destroy() {
+        stopCamera()
+        try {
+            if (!executor.isShutdown) {
+                executor.shutdown()
+            }
         } catch (_: Exception) { }
         try {
-            orientationListener?.disable()
+             orientationListener?.disable()
+        } catch (_: Exception) { }
+        try {
+            if (!isShutterSoundReleased) {
+                shutterSound.release()
+                isShutterSoundReleased = true
+            }
         } catch (_: Exception) { }
     }
 
@@ -511,14 +534,12 @@ class VideoRecorder(
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
         val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
         return try {
-            val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 context.display?.rotation
             } else {
                 @Suppress("DEPRECATION")
                 windowManager.defaultDisplay?.rotation
             } ?: displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
-
-            rotation?.also { lastKnownDisplayRotation = it }
         } catch (_: Exception) {
             lastKnownDisplayRotation
         }
@@ -530,21 +551,32 @@ class VideoRecorder(
         orientationListener = object : OrientationEventListener(context.applicationContext) {
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
-                updateEncodingTargetRotation()
+                // Map raw degrees to Surface rotation buckets
+                val rot = when (orientation) {
+                    in 45..134 -> Surface.ROTATION_90
+                    in 135..224 -> Surface.ROTATION_180
+                    in 225..314 -> Surface.ROTATION_270
+                    else -> Surface.ROTATION_0
+                }
+                
+                lastKnownDisplayRotation = rot
+
+                if (lastRestartedRotation != rot) {
+                    lastRestartedRotation = rot
+                    Log.d(TAG, "Rotation changed to $rot. Restarting camera...")
+                    try {
+                        stopCamera()
+                        startCamera(boundPreviewProvider)
+                    } catch(e: Exception) {
+                        Log.e(TAG, "Error restarting camera on rotation", e)
+                    }
+                }
             }
         }.also { listener ->
             try {
                 if (listener.canDetectOrientation()) listener.enable()
             } catch (_: Exception) { }
         }
-    }
-
-    private fun updateEncodingTargetRotation() {
-        val rot = safeDisplayRotation() ?: return
-        if (rot != lastKnownDisplayRotation) {
-            lastKnownDisplayRotation = rot
-        }
-        encodingPreview?.targetRotation = rot
     }
 
     fun setLinearZoom(value: Float) {

@@ -304,7 +304,6 @@ fun RoomIdScreen(
     onNext: () -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
     var roomId by remember { mutableStateOf(prefs.getString("room_id", "") ?: "") }
     
@@ -490,7 +489,7 @@ fun CameraScreen(
             AndroidView(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
-                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        implementationMode = PreviewView.ImplementationMode.PERFORMANCE
                         recorder.attachPreview(this.surfaceProvider)
                     }
                 },
