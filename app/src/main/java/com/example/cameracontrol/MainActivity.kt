@@ -489,7 +489,7 @@ fun CameraScreen(
             AndroidView(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
-                        implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                         recorder.attachPreview(this.surfaceProvider)
                     }
                 },

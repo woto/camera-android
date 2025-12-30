@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.os.Handler
 import android.os.Looper
+import android.hardware.camera2.CameraCharacteristics
 import android.util.Log
 import android.util.Size
 import android.view.Surface
@@ -21,12 +22,14 @@ import android.view.OrientationEventListener
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 class VideoRecorder(
     private val context: Context,
@@ -53,12 +56,12 @@ class VideoRecorder(
         // Preload to avoid latency on first play
         load(MediaActionSound.START_VIDEO_RECORDING)
     }
+    private var activeWidth = WIDTH
+    private var activeHeight = HEIGHT
+    @Volatile private var sessionRotationDegrees: Int = 0
     @Volatile private var isShutterSoundReleased = false
     @Volatile private var lastKnownDisplayRotation: Int? = null
-    @Volatile private var lastKnownRotationDegrees: Int? = null
     private var orientationListener: OrientationEventListener? = null
-
-    @Volatile private var lastRestartedRotation: Int? = null
     
     companion object {
         private const val TAG = "VideoRecorder"
@@ -88,13 +91,25 @@ class VideoRecorder(
 
             startOrientationListenerIfNeeded()
 
-            // Prefer a stable 1920x1080 stream and rotate via metadata.
             val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
+            val targetSize = resolveTargetSize(rotation)
+            activeWidth = targetSize.width
+            activeHeight = targetSize.height
+            Log.d(TAG, "Starting Camera with Resolution: ${activeWidth}x${activeHeight} (rotation=$rotation)")
+
+            val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
+                CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
+            }
+            sessionRotationDegrees = cameraInfo?.let { info ->
+                info.getSensorRotationDegrees(rotation)
+            } ?: 0
+            CircularBuffer.rotationDegrees = sessionRotationDegrees
+            CircularBuffer.clear()
 
             // 1. UI Preview (Viewfinder)
             // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
             preview = Preview.Builder()
-                .setTargetResolution(Size(WIDTH, HEIGHT))
+                .setTargetResolution(targetSize)
                 .setTargetRotation(rotation)
                 .build()
                 // Don't set dummy provider here; wait for real one
@@ -106,35 +121,15 @@ class VideoRecorder(
             // 3. Recorder Preview (Feeds the Encoder)
             encodingPreview = Preview.Builder()
                 .setTargetName("EncodingPreview")
-                .setTargetResolution(Size(WIDTH, HEIGHT))
+                .setTargetResolution(targetSize)
                 .setTargetRotation(rotation)
                 .build()
 
             // We need to bridge the Encoder's Surface to this Preview
             // Once the codec is configured, inputSurface is ready.
             encodingPreview?.setSurfaceProvider { request ->
-                request.setTransformationInfoListener(executor) { info ->
-                    lastKnownRotationDegrees = info.rotationDegrees
-                    CircularBuffer.rotationDegrees = info.rotationDegrees
-                    Log.d(TAG, "CameraX rotationDegrees: ${info.rotationDegrees}")
-                }
-
-                // Fallback if we don't have a transformation update yet.
-                if (lastKnownRotationDegrees == null) {
-                    val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
-                        CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
-                    }
-                    val displayRot = safeDisplayRotation()
-                    val fallbackRotation = cameraInfo?.let { info ->
-                        val disp = displayRot ?: lastKnownDisplayRotation
-                        disp?.let { info.getSensorRotationDegrees(it) } ?: info.getSensorRotationDegrees()
-                    } ?: 90
-                    CircularBuffer.rotationDegrees = fallbackRotation
-                    Log.d(TAG, "Camera Rotation Fallback: $fallbackRotation")
-                }
-
                 if (inputSurface != null) {
-                    request.provideSurface(inputSurface!!, executor) { result -> 
+                    request.provideSurface(inputSurface!!, executor) { result ->
                         // Surface release callback
                         Log.d(TAG, "Encoding surface request result: ${result.resultCode}")
                     }
@@ -162,7 +157,7 @@ class VideoRecorder(
                     preview?.setSurfaceProvider(it)
                 }
 
-                BufferManager.setRotationProvider { currentRotationDegrees() }
+                BufferManager.setRotationProvider { sessionRotationDegrees }
                 
                 isRecording = true
                 startEncodingLoop()         // Video Loop
@@ -239,7 +234,7 @@ class VideoRecorder(
 
     private fun setupMediaCodec() {
         try {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, WIDTH, HEIGHT)
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, activeWidth, activeHeight)
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
@@ -519,17 +514,6 @@ class VideoRecorder(
         } catch (_: Exception) { }
     }
 
-    private fun currentRotationDegrees(): Int {
-        lastKnownRotationDegrees?.let { return it }
-        return try {
-            val info = camera?.cameraInfo ?: return CircularBuffer.rotationDegrees
-            val disp = safeDisplayRotation() ?: lastKnownDisplayRotation
-            disp?.let { info.getSensorRotationDegrees(it) } ?: info.getSensorRotationDegrees()
-        } catch (_: Exception) {
-            CircularBuffer.rotationDegrees
-        }
-    }
-
     private fun safeDisplayRotation(): Int? {
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
         val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
@@ -545,31 +529,49 @@ class VideoRecorder(
         }
     }
 
+    private fun resolveTargetSize(rotation: Int): Size {
+        val isPortrait = rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180
+        val desired = if (isPortrait) Size(HEIGHT, WIDTH) else Size(WIDTH, HEIGHT)
+        val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
+            CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
+        } ?: return desired
+        val map = Camera2CameraInfo.from(cameraInfo)
+            .getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            ?: return desired
+        val sizes = map.getOutputSizes(SurfaceTexture::class.java) ?: return desired
+        val desiredRatio = desired.width.toFloat() / desired.height.toFloat()
+        val exact = sizes.firstOrNull { it.width == desired.width && it.height == desired.height }
+        if (exact != null) return desired
+        val best = sizes
+            .filter { abs(it.width.toFloat() / it.height.toFloat() - desiredRatio) < 0.01f }
+            .maxByOrNull { it.width * it.height }
+        if (best != null) {
+            return Size(best.width, best.height)
+        }
+        return Size(WIDTH, HEIGHT)
+    }
+
     private fun startOrientationListenerIfNeeded() {
         if (orientationListener != null) return
 
         orientationListener = object : OrientationEventListener(context.applicationContext) {
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
-                // Map raw degrees to Surface rotation buckets
-                val rot = when (orientation) {
+                val displayRotation = when (orientation) {
                     in 45..134 -> Surface.ROTATION_90
                     in 135..224 -> Surface.ROTATION_180
                     in 225..314 -> Surface.ROTATION_270
                     else -> Surface.ROTATION_0
                 }
-                
-                lastKnownDisplayRotation = rot
 
-                if (lastRestartedRotation != rot) {
-                    lastRestartedRotation = rot
-                    Log.d(TAG, "Rotation changed to $rot. Restarting camera...")
-                    try {
-                        stopCamera()
-                        startCamera(boundPreviewProvider)
-                    } catch(e: Exception) {
-                        Log.e(TAG, "Error restarting camera on rotation", e)
-                    }
+                if (lastKnownDisplayRotation == displayRotation) return
+                lastKnownDisplayRotation = displayRotation
+                Log.d(TAG, "Rotation changed to $displayRotation. Restarting camera...")
+                try {
+                    stopCamera()
+                    startCamera(boundPreviewProvider)
+                } catch(e: Exception) {
+                    Log.e(TAG, "Error restarting camera on rotation", e)
                 }
             }
         }.also { listener ->
