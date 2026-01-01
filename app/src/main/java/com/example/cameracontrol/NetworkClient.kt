@@ -49,11 +49,11 @@ object NetworkClient {
         }
         
         if (isConnecting || _connectionStatus.value) {
-            AppLogger.log("WS already connecting/connected")
+            AppLogger.log(TAG, "WS already connecting/connected")
             return
         }
         isConnecting = true
-        AppLogger.log("Opening WS (Room: ${currentRoomId ?: "Default"})...")
+        AppLogger.log(TAG, "Opening WS (Room: ${currentRoomId ?: "Default"})...")
 
         val request = Request.Builder()
             .url(WS_URL)
@@ -63,7 +63,7 @@ object NetworkClient {
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                AppLogger.log("WS Connected")
+                AppLogger.log(TAG, "WS Connected")
                 _connectionStatus.value = true
                 isConnecting = false
                 handler.removeCallbacksAndMessages(null)
@@ -80,7 +80,7 @@ object NetworkClient {
                         return
                     }
                     else if (type == "welcome") {
-                        AppLogger.log("WS Welcome")
+                        AppLogger.log(TAG, "WS Welcome")
                     }
                     else if (json.has("message")) {
                         // Check if message is a JSON object (data payload)
@@ -89,7 +89,7 @@ object NetworkClient {
                              val action = messageObj.optString("action")
                              if (action == "capture") {
                                 _messageFlash.tryEmit(Unit) // Trigger UI flash only on capture requests
-                                AppLogger.log("CAPTURE SIGNAL RECEIVED!")
+                                AppLogger.log(TAG, "CAPTURE SIGNAL RECEIVED!")
                                 val timestamp = messageObj.optString("timestamp", "").ifBlank { null }
                                 BufferManager.triggerUpload(timestamp)
                             }
@@ -103,18 +103,18 @@ object NetworkClient {
                 } catch (e: Exception) {
                     // Only log real errors, not parsing pings
                     if (!text.contains("ping")) {
-                         AppLogger.log("WS Parse Err: ${e.message}")
+                         AppLogger.log(TAG, "WS Parse Err: ${e.message}")
                     }
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                AppLogger.log("WS Failure: ${t.message}")
+                AppLogger.log(TAG, "WS Failure: ${t.message}")
                 handleDisconnect()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                AppLogger.log("WS Closed: $reason")
+                AppLogger.log(TAG, "WS Closed: $reason")
                 handleDisconnect()
             }
         })
@@ -127,7 +127,7 @@ object NetworkClient {
      */
     fun manualTrigger(triggerTimestamp: String? = null) {
         _messageFlash.tryEmit(Unit)
-        AppLogger.log("Manual Trigger: emitting flash + starting upload")
+        AppLogger.log(TAG, "Manual Trigger: emitting flash + starting upload")
         BufferManager.triggerUpload(triggerTimestamp)
     }
 
@@ -136,7 +136,7 @@ object NetworkClient {
         val jsonBody = JSONObject().put("room", safeRoom).toString()
         val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
 
-        AppLogger.log("Trigger POST: room=$safeRoom")
+        AppLogger.log(TAG, "Trigger POST: room=$safeRoom")
 
         val request = Request.Builder()
             .url("$BASE_URL/recorder/trigger")
@@ -147,14 +147,14 @@ object NetworkClient {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                AppLogger.log("Trigger Failed: ${e.message}")
+                AppLogger.log(TAG, "Trigger Failed: ${e.message}")
             }
 
             override fun onResponse(call: Call, response: Response) {
                 if (response.isSuccessful) {
-                    AppLogger.log("Trigger Sent")
+                    AppLogger.log(TAG, "Trigger Sent")
                 } else {
-                    AppLogger.log("Trigger Error: ${response.code}")
+                    AppLogger.log(TAG, "Trigger Error: ${response.code}")
                 }
                 response.close()
             }
@@ -172,14 +172,14 @@ object NetworkClient {
         if (isConnecting || _connectionStatus.value) return
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({
-            AppLogger.log("Reconnecting WS...")
+            AppLogger.log(TAG, "Reconnecting WS...")
             connectWebSocket(currentRoomId) // Reconnect with same room
         }, RECONNECT_DELAY_MS)
     }
 
     @Synchronized
     fun disconnectWebSocket() {
-        AppLogger.log("Disconnecting WS...")
+        AppLogger.log(TAG, "Disconnecting WS...")
         handler.removeCallbacksAndMessages(null)
         webSocket?.close(1000, "Service stopped")
         webSocket = null
@@ -201,7 +201,7 @@ object NetworkClient {
         
         subscribeMsg.put("identifier", identifier.toString())
         ws.send(subscribeMsg.toString())
-        AppLogger.log("Subscribing to RecordingChannel (Room=${roomId ?: "Public"})...")
+        AppLogger.log(TAG, "Subscribing to RecordingChannel (Room=${roomId ?: "Public"})...")
     }
 
     fun uploadFile(file: File, remoteFileName: String, timestamp: String?, room: String? = null, onComplete: () -> Unit) {
@@ -217,7 +217,7 @@ object NetworkClient {
         room?.let { requestBodyBuilder.addFormDataPart("room", it) }
         val requestBody = requestBodyBuilder.build()
 
-        AppLogger.log("Uploading: $remoteFileName...")
+        AppLogger.log(TAG, "Uploading: $remoteFileName...")
 
         val request = Request.Builder()
             .url("$BASE_URL/recorder/upload")
@@ -226,15 +226,15 @@ object NetworkClient {
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                AppLogger.log("Upload Fail: ${e.message}")
+                AppLogger.log(TAG, "Upload Fail: ${e.message}")
                 onComplete() // Clean up even on fail
             }
 
             override fun onResponse(call: Call, response: Response) {
                 if (response.isSuccessful) {
-                    AppLogger.log("Upload Success: ${file.name}")
+                    AppLogger.log(TAG, "Upload Success: ${file.name}")
                 } else {
-                    AppLogger.log("Upload Err: ${response.code}")
+                    AppLogger.log(TAG, "Upload Err: ${response.code}")
                 }
                 response.close()
                 onComplete()

@@ -52,6 +52,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 import java.util.Locale
 
+private const val TAG = "MainActivity"
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -374,7 +376,7 @@ fun CameraScreen(
 
     LaunchedEffect(Unit) {
         BufferManager.initialize(context)
-        AppLogger.log("App Started. Checking Permissions...")
+        AppLogger.log(TAG, "App Started. Checking Permissions...")
         if (!hasPermissions) {
             launcher.launch(
                 arrayOf(
@@ -506,7 +508,7 @@ fun CameraScreen(
         
         // Log Build Time
         LaunchedEffect(Unit) {
-            AppLogger.log("Build Time: " + BuildConfig.BUILD_TIME)
+            AppLogger.log(TAG, "Build Time: " + BuildConfig.BUILD_TIME)
         }
 
         // Top compact actions
@@ -592,7 +594,7 @@ fun CameraScreen(
                 if (recorder == null) {
                     onEditRoom()
                 } else {
-                    AppLogger.log("Trigger POST Clicked")
+                    AppLogger.log(TAG, "Trigger POST Clicked")
                     val roomId = prefs.getString("room_id", null)
                     NetworkClient.sendTrigger(roomId)
                 }

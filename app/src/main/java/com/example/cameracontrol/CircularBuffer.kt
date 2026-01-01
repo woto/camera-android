@@ -2,7 +2,6 @@ package com.example.cameracontrol
 
 import android.media.MediaCodec
 import android.media.MediaFormat
-import android.util.Log
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedDeque
 
@@ -60,8 +59,8 @@ object CircularBuffer {
 
         if (isConfig) {
             // For AAC, config might come here too.
-             Log.d(TAG, "Received Codec Config ($type)")
-             return
+            AppLogger.log(TAG, "Received Codec Config ($type)")
+            return
         }
 
         frames.addLast(frame)

@@ -3,7 +3,6 @@ package com.example.cameracontrol
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.media.MediaMuxer
-import android.util.Log
 import java.io.File
 
 object BufferManager {
@@ -24,11 +23,11 @@ object BufferManager {
 
     fun triggerUpload(triggerTimestamp: String? = null) {
         if (!::outputDir.isInitialized) {
-            Log.e(TAG, "BufferManager not initialized!")
+            AppLogger.e(TAG, "BufferManager not initialized!")
             return
         }
 
-        AppLogger.log("triggerUpload() ts=${triggerTimestamp ?: "null"}")
+        AppLogger.log(TAG, "triggerUpload() ts=${triggerTimestamp ?: "null"}")
         rotationProvider?.invoke()?.let { latest ->
             CircularBuffer.rotationDegrees = latest
         }
@@ -36,23 +35,20 @@ object BufferManager {
         val now = System.currentTimeMillis()
         val deltaMs = now - lastTriggerTime
         if (deltaMs < 3000) {
-            Log.d(TAG, "Trigger debounced (too fast): ${deltaMs}ms since last")
-            AppLogger.log("Trigger debounced: ${deltaMs}ms")
+            AppLogger.log(TAG, "Trigger debounced (too fast): ${deltaMs}ms since last")
             return
         }
         lastTriggerTime = now
         
-        AppLogger.log("Processing Capture...")
+        AppLogger.log(TAG, "Processing Capture...")
 
         // 1. Get Snapshot from RAM
         val snapshot = CircularBuffer.getSnapshot()
         val frames = snapshot.frames
-        Log.d(TAG, "Snapshot: frames=${frames.size} rot=${snapshot.rotation}")
-        AppLogger.log("Snapshot: frames=${frames.size} rot=${snapshot.rotation}")
+        AppLogger.log(TAG, "Snapshot: frames=${frames.size} rot=${snapshot.rotation}")
         
         if (frames.isEmpty()) {
-            Log.w(TAG, "Buffer is empty, nothing to save.")
-            AppLogger.log("Buffer Empty!")
+            AppLogger.w(TAG, "Buffer is empty, nothing to save.")
             return
         }
         
@@ -62,8 +58,7 @@ object BufferManager {
         val videoFrameCount = sortedFrames.count { it.type == CircularBuffer.FrameType.VIDEO }
         val audioFrameCount = sortedFrames.count { it.type == CircularBuffer.FrameType.AUDIO }
         val hasAudioFrames = audioFrameCount > 0
-        Log.d(TAG, "Muxer frames: video=$videoFrameCount audio=$audioFrameCount")
-        AppLogger.log("Muxer frames: v=$videoFrameCount a=$audioFrameCount")
+        AppLogger.log(TAG, "Muxer frames: video=$videoFrameCount audio=$audioFrameCount")
         
         val firstTimeUs = sortedFrames.first().bufferInfo.presentationTimeUs
         val lastTimeUs = sortedFrames.last().bufferInfo.presentationTimeUs
@@ -71,8 +66,7 @@ object BufferManager {
         val startTime = firstTimeUs / 1000 // to ms
         val endTime = lastTimeUs / 1000 // to ms
         val systemTime = System.currentTimeMillis()
-        Log.d(TAG, "PTS: first=$firstTimeUs last=$lastTimeUs startMs=$startTime endMs=$endTime")
-        AppLogger.log("PTS: first=$firstTimeUs last=$lastTimeUs")
+        AppLogger.log(TAG, "PTS: first=$firstTimeUs last=$lastTimeUs startMs=$startTime endMs=$endTime")
         
         // Approximate the real start/end time based on system clock
         val endEpoch = systemTime
@@ -81,8 +75,7 @@ object BufferManager {
         // 2. Create Output File: [device_id]-[start]-[end].mp4
         val fileName = "${deviceId}-${startEpoch}-${endEpoch}.mp4"
         val outputFile = File(outputDir, fileName)
-        Log.d(TAG, "Muxer output: ${outputFile.absolutePath}")
-        AppLogger.log("Muxer output: ${outputFile.name}")
+        AppLogger.log(TAG, "Muxer output: ${outputFile.absolutePath}")
 
         var muxer: MediaMuxer? = null
         try {
@@ -98,25 +91,22 @@ object BufferManager {
             if (videoFormat != null) {
                 videoTrackIndex = muxer.addTrack(videoFormat)
                 muxer.setOrientationHint(snapshot.rotation)
-                Log.d(TAG, "Video track added. rotation=${snapshot.rotation} format=$videoFormat")
-                AppLogger.log("Video track added rot=${snapshot.rotation}")
+                AppLogger.log(TAG, "Video track added. rotation=${snapshot.rotation} format=$videoFormat")
             } else {
-                Log.e(TAG, "Missing Video Format!")
+                AppLogger.e(TAG, "Missing Video Format!")
                 return
             }
             
             if (audioFormat != null && hasAudioFrames) {
                 audioTrackIndex = muxer.addTrack(audioFormat)
-                AppLogger.log("Muxing: Vid+Aud")
-                Log.d(TAG, "Audio track added. format=$audioFormat")
+                AppLogger.log(TAG, "Muxing: Vid+Aud")
+                AppLogger.log(TAG, "Audio track added. format=$audioFormat")
             } else {
-                Log.w(TAG, "Missing Audio Format - Muxing Video Only")
-                AppLogger.log("No Audio Fmt!")
+                AppLogger.w(TAG, "Missing Audio Format - Muxing Video Only")
             }
             
             muxer.start()
-            Log.d(TAG, "Muxer started (v=$videoTrackIndex a=$audioTrackIndex)")
-            AppLogger.log("Muxer started")
+            AppLogger.log(TAG, "Muxer started (v=$videoTrackIndex a=$audioTrackIndex)")
             
             // 4. Write Frames
             if (sortedFrames.isNotEmpty()) {
@@ -147,23 +137,20 @@ object BufferManager {
             } finally {
                 muxer.release()
             }
-            Log.d(TAG, "Muxer stopped and released")
-            AppLogger.log("Muxer stopped")
+            AppLogger.log(TAG, "Muxer stopped and released")
             
-        Log.d(TAG, "Saved MP4: ${outputFile.length()} bytes")
-        AppLogger.log("Saved MP4: ${outputFile.length() / 1024} KB")
+        AppLogger.log(TAG, "Saved MP4: ${outputFile.length()} bytes")
 
         // 5. Upload
         val currentRoom = NetworkClient.getCurrentRoomId()
-        AppLogger.log("Upload start: ${outputFile.name} room=${currentRoom ?: "null"}")
+        AppLogger.log(TAG, "Upload start: ${outputFile.name} room=${currentRoom ?: "null"}")
         NetworkClient.uploadFile(outputFile, outputFile.name, triggerTimestamp, currentRoom) {
             if (outputFile.exists()) outputFile.delete()
-            AppLogger.log("Upload & Cleanup Done")
+            AppLogger.log(TAG, "Upload & Cleanup Done")
         }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Muxing failed", e)
-            AppLogger.log("Mux Error: ${e.message}")
+            AppLogger.e(TAG, "Muxing failed", e)
             try {
                 muxer?.release()
             } catch (_: Exception) { }

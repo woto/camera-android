@@ -25,6 +25,7 @@ class CameraForegroundService : LifecycleService() {
         const val NOTIFICATION_ID = 1
         const val ACTION_START = "com.example.cameracontrol.START"
         const val ACTION_STOP = "com.example.cameracontrol.STOP"
+        private const val TAG = "CameraForegroundService"
 
         private val _foregroundState = MutableStateFlow(false)
         val foregroundState: StateFlow<Boolean> = _foregroundState
@@ -69,7 +70,7 @@ class CameraForegroundService : LifecycleService() {
 
         when (intent?.action) {
             ACTION_STOP -> {
-                AppLogger.log("Svc Stopping...")
+                AppLogger.log(TAG, "Svc Stopping...")
                 // Stop foreground mode first - this is critical!
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 _foregroundState.value = false
@@ -91,14 +92,14 @@ class CameraForegroundService : LifecycleService() {
             val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
             val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (!cameraGranted || !audioGranted) {
-                AppLogger.log("Foreground service missing permissions, stopping")
+                AppLogger.log(TAG, "Foreground service missing permissions, stopping")
                 _foregroundState.value = false
                 stopSelf()
                 return START_NOT_STICKY
             }
 
             val roomId = intent?.getStringExtra("room_id")
-            AppLogger.log("Svc Starting (Room=$roomId)")
+            AppLogger.log(TAG, "Svc Starting (Room=$roomId)")
             NetworkClient.connectWebSocket(roomId)
             recorder.startCamera()
             hasStartedCamera = true

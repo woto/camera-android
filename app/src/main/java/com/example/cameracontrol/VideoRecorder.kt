@@ -15,7 +15,6 @@ import android.os.SystemClock
 import android.os.Handler
 import android.os.Looper
 import android.hardware.camera2.CameraCharacteristics
-import android.util.Log
 import android.util.Size
 import android.view.Surface
 import android.view.OrientationEventListener
@@ -89,20 +88,19 @@ class VideoRecorder(
     fun startCamera(surfaceProvider: Preview.SurfaceProvider? = null) {
         surfaceProvider?.let { boundPreviewProvider = it }
         if (isStarting) {
-            AppLogger.log("startCamera() ignored: already starting")
+            AppLogger.log(TAG, "startCamera() ignored: already starting")
             return
         }
         if (isRecording) {
-            AppLogger.log("startCamera() ignored: already recording")
+            AppLogger.log(TAG, "startCamera() ignored: already recording")
             return
         }
         isStarting = true
-        AppLogger.log("startCamera() called")
-        Log.d(TAG, "startCamera() boundPreviewProvider=${boundPreviewProvider != null}")
+        AppLogger.log(TAG, "startCamera() boundPreviewProvider=${boundPreviewProvider != null}")
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
-                AppLogger.log("Camera Provider Ready")
+                AppLogger.log(TAG, "Camera Provider Ready")
                 cameraProvider = cameraProviderFuture.get()
 
                 startOrientationListenerIfNeeded()
@@ -112,12 +110,11 @@ class VideoRecorder(
                 val targetSize = resolveTargetSize(rotation)
                 activeWidth = targetSize.width
                 activeHeight = targetSize.height
-                Log.d(
+                AppLogger.log(
                     TAG,
                     "Starting Camera with Resolution: ${activeWidth}x${activeHeight} " +
                         "(rotation=$rotation previewRotation=$previewRotation)"
                 )
-                AppLogger.log("Cam start: ${activeWidth}x${activeHeight} rot=$rotation prev=$previewRotation")
 
                 val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
                     CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
@@ -133,8 +130,7 @@ class VideoRecorder(
                 }
                 CircularBuffer.rotationDegrees = sessionRotationDegrees
                 CircularBuffer.clear()
-                Log.d(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
-                AppLogger.log("Session rotation=$sessionRotationDegrees")
+                AppLogger.log(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
 
                 // 1. UI Preview (Viewfinder) - only when screen is on
                 // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
@@ -164,8 +160,7 @@ class VideoRecorder(
                     if (inputSurface != null) {
                         request.provideSurface(inputSurface!!, executor) { result -> 
                             // Surface release callback
-                            Log.d(TAG, "Encoding surface request result: ${result.resultCode}")
-                            AppLogger.log("Encoding surface result: ${result.resultCode}")
+                            AppLogger.log(TAG, "Encoding surface request result: ${result.resultCode}")
                         }
                     } else {
                         request.willNotProvideSurface()
@@ -176,7 +171,7 @@ class VideoRecorder(
                     cameraProvider?.unbindAll()
                     // Bind both the UI preview and the Encoding preview
                     // If boundPreviewProvider is null, Preview will run but not show anything until attachPreview is called
-                    AppLogger.log("Binding Camera UseCases...")
+                    AppLogger.log(TAG, "Binding Camera UseCases...")
                     val useCases = if (preview != null) {
                         arrayOf(preview, encodingPreview)
                     } else {
@@ -187,12 +182,12 @@ class VideoRecorder(
                         CameraSelector.DEFAULT_BACK_CAMERA,
                         *useCases
                     )
-                    Log.d(TAG, "Camera bound. preview=${preview != null} encodingPreview=${encodingPreview != null}")
+                    AppLogger.log(TAG, "Camera bound. preview=${preview != null} encodingPreview=${encodingPreview != null}")
                     
                     // If UI is already waiting, attach it
                     // If UI is already waiting, attach it
                     boundPreviewProvider?.let { 
-                        AppLogger.log("Attaching UI Surface to Preview")
+                        AppLogger.log(TAG, "Attaching UI Surface to Preview")
                         preview?.setSurfaceProvider(it)
                     }
 
@@ -200,15 +195,14 @@ class VideoRecorder(
                     
                     isRecording = true
                     startEncodingLoop()         // Video Loop
-                    // AppLogger.log("Starting Audio Loop...")
+                    // AppLogger.log(TAG, "Starting Audio Loop...")
                     startAudioEncodingLoop()    // Audio Loop
                     
-                    Log.d(TAG, "Camera and Recording started seamlessly")
-                    AppLogger.log("Camera Bound & Started")
+                    AppLogger.log(TAG, "Camera and Recording started seamlessly")
                     
                 } catch (exc: Exception) {
-                    Log.e(TAG, "Use case binding failed", exc)
-                    AppLogger.log("Camera Bind Failed: ${exc.message}")
+                    AppLogger.e(TAG, "Use case binding failed", exc)
+                    AppLogger.log(TAG, "Camera Bind Failed: ${exc.message}")
                 }
             } finally {
                 isStarting = false
@@ -220,10 +214,10 @@ class VideoRecorder(
         boundPreviewProvider = surfaceProvider
         if (preview == null) {
             if (isScreenOn) {
-                AppLogger.log("Preview missing; restarting camera to attach UI")
+                AppLogger.log(TAG, "Preview missing; restarting camera to attach UI")
                 startCamera(surfaceProvider)
             } else {
-                AppLogger.log("Preview not ready; screen off, skip attach")
+                AppLogger.log(TAG, "Preview not ready; screen off, skip attach")
             }
         } else {
             preview?.setSurfaceProvider(surfaceProvider)
@@ -231,31 +225,30 @@ class VideoRecorder(
             lastPreviewRotation = rotation
             preview?.targetRotation = rotation
             encodingPreview?.targetRotation = rotation
-            Log.d(TAG, "attachPreview() rotation=$rotation")
-            AppLogger.log("attachPreview rot=$rotation")
+            AppLogger.log(TAG, "attachPreview() rotation=$rotation")
         }
     }
 
     fun setScreenOn(isOn: Boolean) {
         if (isScreenOn == isOn) return
         isScreenOn = isOn
-        AppLogger.log("Screen state: ${if (isOn) "ON" else "OFF"}")
+        AppLogger.log(TAG, "Screen state: ${if (isOn) "ON" else "OFF"}")
         try {
             stopCamera()
             startCamera(boundPreviewProvider)
         } catch (e: Exception) {
-            Log.e(TAG, "Error restarting camera on screen state change", e)
+            AppLogger.e(TAG, "Error restarting camera on screen state change", e)
         }
     }
 
     fun pulseTorch(durationMs: Long = 200) {
         val cam = camera ?: run {
-            AppLogger.log("Torch skipped: camera not ready")
+            AppLogger.log(TAG, "Torch skipped: camera not ready")
             return
         }
         val info = cam.cameraInfo
         if (!info.hasFlashUnit()) {
-            AppLogger.log("Torch unavailable on this device")
+            AppLogger.log(TAG, "Torch unavailable on this device")
             return
         }
         val mainHandler = Handler(Looper.getMainLooper())
@@ -281,19 +274,19 @@ class VideoRecorder(
                     }
                 }, durationMs.toLong())
             } catch (e: Exception) {
-                AppLogger.log("Torch error: ${e.message}")
+                AppLogger.log(TAG, "Torch error: ${e.message}")
             }
         }
     }
 
     fun setTorchEnabled(enabled: Boolean) {
         val cam = camera ?: run {
-            AppLogger.log("Torch skipped: camera not ready")
+            AppLogger.log(TAG, "Torch skipped: camera not ready")
             return
         }
         val info = cam.cameraInfo
         if (!info.hasFlashUnit()) {
-            AppLogger.log("Torch unavailable on this device")
+            AppLogger.log(TAG, "Torch unavailable on this device")
             return
         }
         val mainHandler = Handler(Looper.getMainLooper())
@@ -302,9 +295,9 @@ class VideoRecorder(
             try {
                 cam.cameraControl.enableTorch(enabled)
                 torchState = enabled
-                AppLogger.log("Torch ${if (enabled) "ON" else "OFF"}")
+                AppLogger.log(TAG, "Torch ${if (enabled) "ON" else "OFF"}")
             } catch (e: Exception) {
-                AppLogger.log("Torch error: ${e.message}")
+                AppLogger.log(TAG, "Torch error: ${e.message}")
             }
         }
     }
@@ -321,8 +314,7 @@ class VideoRecorder(
             format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
             format.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
-            Log.d(TAG, "Video codec format: $format")
-            AppLogger.log("Video codec: ${activeWidth}x${activeHeight} br=$BIT_RATE fps=$FRAME_RATE")
+            AppLogger.log(TAG, "Video codec format: $format")
 
             mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -332,13 +324,13 @@ class VideoRecorder(
             
             mediaCodec?.start()
         } catch (e: IOException) {
-            Log.e(TAG, "Failed to create MediaCodec", e)
-            AppLogger.log("Codec Error: ${e.message}")
+            AppLogger.e(TAG, "Failed to create MediaCodec", e)
+            AppLogger.log(TAG, "Codec Error: ${e.message}")
         }
     }
     
     private fun setupAudioMediaCodec() {
-        AppLogger.log("Setting up Audio Codec...")
+        AppLogger.log(TAG, "Setting up Audio Codec...")
         try {
             isAudioStopping.set(false)
             audioSampleRate = resolveSampleRate()
@@ -347,8 +339,7 @@ class VideoRecorder(
             format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
             format.setInteger(MediaFormat.KEY_CHANNEL_MASK, AudioFormat.CHANNEL_IN_MONO)
             format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
-            Log.d(TAG, "Audio codec format: $format")
-            AppLogger.log("Audio codec: rate=$audioSampleRate br=$AUDIO_BIT_RATE")
+            AppLogger.log(TAG, "Audio codec format: $format")
 
             audioCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
             audioCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -362,15 +353,19 @@ class VideoRecorder(
             )
 
             if (minBufferSize <= 0) {
-                Log.e(TAG, "Unsupported audio config. Min buffer=$minBufferSize at rate=$audioSampleRate")
-                AppLogger.log("Audio cfg not supported")
+                AppLogger.e(TAG, "Unsupported audio config. Min buffer=$minBufferSize at rate=$audioSampleRate")
+                AppLogger.log(TAG, "Audio cfg not supported")
                 releaseAudioCodecSafely()
                 return
             }
             
             val perm = android.Manifest.permission.RECORD_AUDIO
             val check = ContextCompat.checkSelfPermission(context, perm)
-            Log.d(TAG, "Checking Perm: $perm on ${context.packageName}. Result: $check (Expected: ${android.content.pm.PackageManager.PERMISSION_GRANTED})")
+            AppLogger.log(
+                TAG,
+                "Checking Perm: $perm on ${context.packageName}. Result: $check " +
+                    "(Expected: ${android.content.pm.PackageManager.PERMISSION_GRANTED})"
+            )
 
             // Fix: Increase buffer size to prevent underruns while keeping latency reasonable
             val bufferSize = minBufferSize * 6
@@ -389,22 +384,21 @@ class VideoRecorder(
                     .setBufferSizeInBytes(bufferSize)
                     .build()
                 if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                    Log.e(TAG, "AudioRecord failed to initialize!")
-                    AppLogger.log("AudioRecord Init Failed")
+                    AppLogger.e(TAG, "AudioRecord failed to initialize!")
+                    AppLogger.log(TAG, "AudioRecord Init Failed")
                     releaseAudioCodecSafely()
                     audioRecord = null
                 } else {
-                    Log.d(TAG, "AudioRecord initialized (src=$audioSource, rate=$audioSampleRate, buf=$bufferSize)")
-                    AppLogger.log("Mic Init OK (src=$audioSource, rate=$audioSampleRate, buf=$bufferSize)")
+                    AppLogger.log(TAG, "AudioRecord initialized (src=$audioSource, rate=$audioSampleRate, buf=$bufferSize)")
                 }
             } else {
-                Log.e(TAG, "RECORD_AUDIO Permission NOT GRANTED")
-                AppLogger.log("No Audio Perm")
+                AppLogger.e(TAG, "RECORD_AUDIO Permission NOT GRANTED")
+                AppLogger.log(TAG, "No Audio Perm")
                 releaseAudioCodecSafely()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create AudioCodec", e)
-            AppLogger.log("Audio Codec Err: ${e.message}")
+            AppLogger.e(TAG, "Failed to create AudioCodec", e)
+            AppLogger.log(TAG, "Audio Codec Err: ${e.message}")
             releaseAudioCodecSafely()
         }
     }
@@ -427,15 +421,15 @@ class VideoRecorder(
                     } else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                         // This usually contains the CSD-0/CSD-1 (SPS/PPS) which are critical
                         val newFormat = mediaCodec?.outputFormat
-                        Log.d(TAG, "Output format changed: $newFormat")
+                        AppLogger.log(TAG, "Output format changed: $newFormat")
                         if (newFormat != null) {
                             CircularBuffer.videoFormat = newFormat
-                            AppLogger.log("Video format ready")
+                            AppLogger.log(TAG, "Video format ready")
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error in encoding loop", e)
-                    AppLogger.log("Video loop err: ${e.message}")
+                    AppLogger.e(TAG, "Error in encoding loop", e)
+                    AppLogger.log(TAG, "Video loop err: ${e.message}")
                 }
             }
         }
@@ -446,7 +440,7 @@ class VideoRecorder(
             val size = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             if (size > 0) {
                 if (rate != DEFAULT_AUDIO_SAMPLE_RATE) {
-                    AppLogger.log("Using alt audio rate: $rate")
+                    AppLogger.log(TAG, "Using alt audio rate: $rate")
                 }
                 return rate
             }
@@ -468,14 +462,14 @@ class VideoRecorder(
 
     private fun startAudioEncodingLoop() {
         if (audioRecord == null || audioCodec == null) {
-            AppLogger.log("Audio Loop Skipped: null rec/codec")
+            AppLogger.log(TAG, "Audio Loop Skipped: null rec/codec")
             return
         }
         
         executor.submit {
             // Fix: Set Thread Priority to URGENT_AUDIO
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
-            AppLogger.log("Audio Loop Thread Started (Urgent)")
+            AppLogger.log(TAG, "Audio Loop Thread Started (Urgent)")
             
             try {
                 audioRecord?.startRecording()
@@ -501,7 +495,7 @@ class VideoRecorder(
                                 val durationUs = (readBytes * 1_000_000L) / (audioSampleRate * AUDIO_CHANNEL_COUNT * 2)
                                 audioPresentationTimeUs += durationUs
                             } else if (readBytes < 0) {
-                                Log.e(TAG, "AudioRecord read error: $readBytes")
+                                AppLogger.e(TAG, "AudioRecord read error: $readBytes")
                             } 
                         }
                     }
@@ -520,14 +514,13 @@ class VideoRecorder(
                         val newFormat = audioCodec?.outputFormat
                         if (newFormat != null) {
                             CircularBuffer.audioFormat = newFormat
-                            Log.d(TAG, "Audio Format Changed (Captured): $newFormat")
-                            AppLogger.log("Audio format ready")
+                            AppLogger.log(TAG, "Audio Format Changed (Captured): $newFormat")
                         }
                     }
                 }
             } catch (e: Exception) {
-               Log.e(TAG, "Audio Loop Error", e)
-               AppLogger.log("Audio Err: ${e.message}")
+               AppLogger.e(TAG, "Audio Loop Error", e)
+               AppLogger.log(TAG, "Audio Err: ${e.message}")
             } finally {
                 shutdownAudio("audio loop end")
             }
@@ -538,15 +531,15 @@ class VideoRecorder(
         if (!isAudioStopping.compareAndSet(false, true)) {
             return
         }
-        Log.d(TAG, "Stopping Audio Record ($reason)")
+        AppLogger.log(TAG, "Stopping Audio Record ($reason)")
         try {
             if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 audioRecord?.stop()
             }
         } catch (e: IllegalStateException) {
-            Log.e(TAG, "Error stopping audio record", e)
+            AppLogger.e(TAG, "Error stopping audio record", e)
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping audio record", e)
+            AppLogger.e(TAG, "Error stopping audio record", e)
         } finally {
             try {
                 audioRecord?.release()
@@ -556,9 +549,9 @@ class VideoRecorder(
         try {
             audioCodec?.stop()
         } catch (e: IllegalStateException) {
-            Log.e(TAG, "Error stopping audio codec", e)
+            AppLogger.e(TAG, "Error stopping audio codec", e)
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping audio codec", e)
+            AppLogger.e(TAG, "Error stopping audio codec", e)
         } finally {
             try {
                 audioCodec?.release()
@@ -578,8 +571,7 @@ class VideoRecorder(
     }
 
     fun stopCamera() {
-        Log.d(TAG, "stopCamera() called")
-        AppLogger.log("stopCamera")
+        AppLogger.log(TAG, "stopCamera() called")
         isRecording = false
         isStarting = false
         // Stop audio first to avoid blocking writes during teardown
@@ -597,8 +589,7 @@ class VideoRecorder(
         inputSurface = null
         cameraProvider?.unbindAll()
         CircularBuffer.clear()
-        Log.d(TAG, "Camera stopped; buffer cleared")
-        AppLogger.log("Camera stopped")
+        AppLogger.log(TAG, "Camera stopped; buffer cleared")
         // executor.shutdown() -> MOVED TO destroy()
         // Keep shutter sound alive for quick restarts; release in destroy().
         try {
@@ -651,17 +642,17 @@ class VideoRecorder(
         val desiredRatio = desired.width.toFloat() / desired.height.toFloat()
         val exact = sizes.firstOrNull { it.width == desired.width && it.height == desired.height }
         if (exact != null) {
-            Log.d(TAG, "Target size exact match: ${desired.width}x${desired.height}")
+            AppLogger.log(TAG, "Target size exact match: ${desired.width}x${desired.height}")
             return desired
         }
         val best = sizes
             .filter { abs(it.width.toFloat() / it.height.toFloat() - desiredRatio) < 0.01f }
             .maxByOrNull { it.width * it.height }
         if (best != null) {
-            Log.d(TAG, "Target size best match: ${best.width}x${best.height}")
+            AppLogger.log(TAG, "Target size best match: ${best.width}x${best.height}")
             return Size(best.width, best.height)
         }
-        Log.d(TAG, "Target size fallback: ${WIDTH}x${HEIGHT}")
+        AppLogger.log(TAG, "Target size fallback: ${WIDTH}x${HEIGHT}")
         return Size(WIDTH, HEIGHT)
     }
 
@@ -680,14 +671,13 @@ class VideoRecorder(
 
                 if (lastKnownDisplayRotation == displayRotation) return
                 lastKnownDisplayRotation = displayRotation
-                Log.d(TAG, "Rotation changed to $displayRotation. Restarting camera...")
-                AppLogger.log("Rotation change: $displayRotation")
+                AppLogger.log(TAG, "Rotation changed to $displayRotation. Restarting camera...")
                 try {
                     stopCamera()
                     startCamera(boundPreviewProvider)
                 } catch(e: Exception) {
-                    Log.e(TAG, "Error restarting camera on rotation", e)
-                    AppLogger.log("Restart err: ${e.message}")
+                    AppLogger.e(TAG, "Error restarting camera on rotation", e)
+                    AppLogger.log(TAG, "Restart err: ${e.message}")
                 }
             }
         }.also { listener ->
