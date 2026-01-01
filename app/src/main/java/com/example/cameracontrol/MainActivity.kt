@@ -49,6 +49,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
 import java.util.Locale
 
@@ -444,6 +445,9 @@ fun CameraScreen(
 
     val recorder = cameraService?.getRecorder()
     var zoomLinear by rememberSaveable { mutableFloatStateOf(0f) }
+    var orientationDebug by remember { mutableStateOf<String?>(null) }
+    var lastAttachedRotation by remember { mutableStateOf<Int?>(null) }
+    var lastSurfaceProviderId by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(isBound, hasPermissions) {
         if (isBound) {
@@ -480,6 +484,13 @@ fun CameraScreen(
             recorder.setTorchEnabled(!isConnected)
         }
     }
+
+    LaunchedEffect(recorder) {
+        while (isActive) {
+            orientationDebug = recorder?.getOrientationDebugString()
+            delay(250)
+        }
+    }
     
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         if (hasPermissions && recorder != null) {
@@ -488,11 +499,21 @@ fun CameraScreen(
                 factory = { ctx ->
                     PreviewView(ctx).apply {
                         implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                        recorder.attachPreview(this.surfaceProvider, this.display?.rotation)
+                        val rotation = this.display?.rotation
+                        val providerId = System.identityHashCode(this.surfaceProvider)
+                        lastSurfaceProviderId = providerId
+                        lastAttachedRotation = rotation
+                        recorder.attachPreview(this.surfaceProvider, rotation)
                     }
                 },
                 update = { view ->
-                    recorder.attachPreview(view.surfaceProvider, view.display?.rotation)
+                    val rotation = view.display?.rotation
+                    val providerId = System.identityHashCode(view.surfaceProvider)
+                    if (rotation != lastAttachedRotation || providerId != lastSurfaceProviderId) {
+                        lastSurfaceProviderId = providerId
+                        lastAttachedRotation = rotation
+                        recorder.attachPreview(view.surfaceProvider, rotation)
+                    }
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -505,7 +526,19 @@ fun CameraScreen(
                 Text(Strings.get("starting_camera", isRussian), color = Color.White)
             }
         }
-        
+
+        if (orientationDebug != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 10.dp, top = 56.dp, end = 10.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(orientationDebug!!, color = Color.White, fontSize = 12.sp)
+            }
+        }
+
         // Log Build Time
         LaunchedEffect(Unit) {
             AppLogger.log(TAG, "Build Time: " + BuildConfig.BUILD_TIME)

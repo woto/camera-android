@@ -62,10 +62,37 @@ class VideoRecorder(
     @Volatile private var isShutterSoundReleased = false
     @Volatile private var lastKnownDisplayRotation: Int? = null
     @Volatile private var lastPreviewRotation: Int? = null
+    @Volatile private var lastSensorOrientationDegrees: Int? = null
+    @Volatile private var lastSensorDisplayRotation: Int? = null
+    @Volatile private var lastSafeDisplayRotation: Int? = null
     @Volatile private var isScreenOn: Boolean = true
     @Volatile private var isStarting = false
+    @Volatile private var pendingDisplayRotation: Int? = null
     private var orientationListener: OrientationEventListener? = null
     private val isAudioStopping = AtomicBoolean(false)
+    private val rotationHandler = Handler(Looper.getMainLooper())
+    private val rotationDebounceMs = 250L
+    private val applyRotationChange = Runnable {
+        val rotation = pendingDisplayRotation ?: return@Runnable
+        pendingDisplayRotation = null
+        val safeRotation = safeDisplayRotation()
+        AppLogger.log(
+            TAG,
+            "Apply rotation: pending=$rotation safeDisplayRotation=$safeRotation " +
+                "lastKnown=$lastKnownDisplayRotation lastPreview=$lastPreviewRotation " +
+                "isStarting=$isStarting isRecording=$isRecording"
+        )
+        if (lastKnownDisplayRotation == rotation) return@Runnable
+        lastKnownDisplayRotation = rotation
+        AppLogger.log(TAG, "Rotation changed to $rotation. Restarting camera...")
+        try {
+            stopCamera()
+            startCamera(boundPreviewProvider)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Error restarting camera on rotation", e)
+            AppLogger.log(TAG, "Restart err: ${e.message}")
+        }
+    }
     
     companion object {
         private const val TAG = "VideoRecorder"
@@ -105,12 +132,14 @@ class VideoRecorder(
 
                 startOrientationListenerIfNeeded()
 
-                val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
-                val previewRotation = lastPreviewRotation ?: safeDisplayRotation() ?: rotation
+                val safeRotation = safeDisplayRotation()
+                val rotation = safeRotation ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
+                lastKnownDisplayRotation = rotation
+                val previewRotation = safeRotation ?: lastPreviewRotation ?: rotation
                 AppLogger.log(
                     TAG,
                     "Orientation pick: lastKnownDisplayRotation=$lastKnownDisplayRotation " +
-                        "safeDisplayRotation=${safeDisplayRotation()} lastPreviewRotation=$lastPreviewRotation " +
+                        "safeDisplayRotation=$safeRotation lastPreviewRotation=$lastPreviewRotation " +
                         "rotation=$rotation previewRotation=$previewRotation"
                 )
                 val targetSize = resolveTargetSize(rotation)
@@ -635,6 +664,7 @@ class VideoRecorder(
                 @Suppress("DEPRECATION")
                 windowManager.defaultDisplay?.rotation
             } ?: displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
+            lastSafeDisplayRotation = rotation
             AppLogger.log(TAG, "safeDisplayRotation() -> $rotation")
             rotation
         } catch (_: Exception) {
@@ -678,23 +708,27 @@ class VideoRecorder(
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
                 val displayRotation = when (orientation) {
-                    in 45..134 -> Surface.ROTATION_90
+                    in 45..134 -> Surface.ROTATION_270
                     in 135..224 -> Surface.ROTATION_180
-                    in 225..314 -> Surface.ROTATION_270
+                    in 225..314 -> Surface.ROTATION_90
                     else -> Surface.ROTATION_0
                 }
 
+                lastSensorOrientationDegrees = orientation
+                lastSensorDisplayRotation = displayRotation
                 AppLogger.log(TAG, "Sensor orientation=$orientation -> displayRotation=$displayRotation")
-                if (lastKnownDisplayRotation == displayRotation) return
-                lastKnownDisplayRotation = displayRotation
-                AppLogger.log(TAG, "Rotation changed to $displayRotation. Restarting camera...")
-                try {
-                    stopCamera()
-                    startCamera(boundPreviewProvider)
-                } catch(e: Exception) {
-                    AppLogger.e(TAG, "Error restarting camera on rotation", e)
-                    AppLogger.log(TAG, "Restart err: ${e.message}")
+                val safeRotation = safeDisplayRotation()
+                if (safeRotation != null && safeRotation != displayRotation) {
+                    AppLogger.log(
+                        TAG,
+                        "Rotation mismatch: sensor=$displayRotation safeDisplayRotation=$safeRotation " +
+                            "lastKnown=$lastKnownDisplayRotation"
+                    )
                 }
+                if (lastKnownDisplayRotation == displayRotation && pendingDisplayRotation == null) return
+                pendingDisplayRotation = displayRotation
+                rotationHandler.removeCallbacks(applyRotationChange)
+                rotationHandler.postDelayed(applyRotationChange, rotationDebounceMs)
             }
         }.also { listener ->
             try {
@@ -710,5 +744,20 @@ class VideoRecorder(
         } catch (_: Exception) {
             // Camera might not be ready; ignore
         }
+    }
+
+    fun getOrientationDebugString(): String? {
+        val sensorDeg = lastSensorOrientationDegrees
+        val sensorRot = lastSensorDisplayRotation
+        val safeRot = lastSafeDisplayRotation
+        val knownRot = lastKnownDisplayRotation
+        val prevRot = lastPreviewRotation
+        val sessionRot = sessionRotationDegrees
+        if (sensorDeg == null && sensorRot == null && safeRot == null && knownRot == null && prevRot == null) {
+            return null
+        }
+        return "Sensor=${sensorDeg ?: "-"} deg -> dispRot=${sensorRot ?: "-"} | " +
+            "safeDisp=${safeRot ?: "-"} | lastKnown=${knownRot ?: "-"} | " +
+            "lastPrev=${prevRot ?: "-"} | session=${sessionRot}"
     }
 }
