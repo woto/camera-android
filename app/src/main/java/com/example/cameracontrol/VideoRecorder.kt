@@ -133,13 +133,24 @@ class VideoRecorder(
                 startOrientationListenerIfNeeded()
 
                 val safeRotation = safeDisplayRotation()
-                val rotation = safeRotation ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
+                val sensorRotation = lastSensorDisplayRotation
+                val effectiveScreenOn = isDisplayInteractive()
+                val rotation = if (!effectiveScreenOn && sensorRotation != null) {
+                    sensorRotation
+                } else {
+                    safeRotation ?: lastKnownDisplayRotation ?: Surface.ROTATION_0
+                }
                 lastKnownDisplayRotation = rotation
-                val previewRotation = safeRotation ?: lastPreviewRotation ?: rotation
+                val previewRotation = if (!effectiveScreenOn && sensorRotation != null) {
+                    sensorRotation
+                } else {
+                    safeRotation ?: lastPreviewRotation ?: rotation
+                }
                 AppLogger.log(
                     TAG,
                     "Orientation pick: lastKnownDisplayRotation=$lastKnownDisplayRotation " +
                         "safeDisplayRotation=$safeRotation lastPreviewRotation=$lastPreviewRotation " +
+                        "sensorRotation=$sensorRotation screenOn=$effectiveScreenOn " +
                         "rotation=$rotation previewRotation=$previewRotation"
                 )
                 val targetSize = resolveTargetSize(rotation)
@@ -158,11 +169,7 @@ class VideoRecorder(
                     info.getSensorRotationDegrees(rotation)
                 } ?: 0
                 val needsLandscapeFlip = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
-                sessionRotationDegrees = if (needsLandscapeFlip) {
-                    (baseRotation + 180) % 360
-                } else {
-                    baseRotation
-                }
+                sessionRotationDegrees = baseRotation
                 AppLogger.log(
                     TAG,
                     "Orientation calc: baseRotation=$baseRotation needsLandscapeFlip=$needsLandscapeFlip " +
@@ -273,6 +280,7 @@ class VideoRecorder(
         if (isScreenOn == isOn) return
         isScreenOn = isOn
         AppLogger.log(TAG, "Screen state: ${if (isOn) "ON" else "OFF"}")
+        if (!isRecording && !isStarting) return
         try {
             stopCamera()
             startCamera(boundPreviewProvider)
@@ -670,6 +678,15 @@ class VideoRecorder(
         } catch (_: Exception) {
             AppLogger.log(TAG, "safeDisplayRotation() failed; using lastKnownDisplayRotation=$lastKnownDisplayRotation")
             lastKnownDisplayRotation
+        }
+    }
+
+    private fun isDisplayInteractive(): Boolean {
+        return try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            powerManager.isInteractive
+        } catch (_: Exception) {
+            isScreenOn
         }
     }
 
