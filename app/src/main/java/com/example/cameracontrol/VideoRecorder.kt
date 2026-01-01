@@ -107,6 +107,12 @@ class VideoRecorder(
 
                 val rotation = lastKnownDisplayRotation ?: safeDisplayRotation() ?: Surface.ROTATION_0
                 val previewRotation = lastPreviewRotation ?: safeDisplayRotation() ?: rotation
+                AppLogger.log(
+                    TAG,
+                    "Orientation pick: lastKnownDisplayRotation=$lastKnownDisplayRotation " +
+                        "safeDisplayRotation=${safeDisplayRotation()} lastPreviewRotation=$lastPreviewRotation " +
+                        "rotation=$rotation previewRotation=$previewRotation"
+                )
                 val targetSize = resolveTargetSize(rotation)
                 activeWidth = targetSize.width
                 activeHeight = targetSize.height
@@ -128,6 +134,11 @@ class VideoRecorder(
                 } else {
                     baseRotation
                 }
+                AppLogger.log(
+                    TAG,
+                    "Orientation calc: baseRotation=$baseRotation needsLandscapeFlip=$needsLandscapeFlip " +
+                        "sessionRotationDegrees=$sessionRotationDegrees"
+                )
                 CircularBuffer.rotationDegrees = sessionRotationDegrees
                 CircularBuffer.clear()
                 AppLogger.log(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
@@ -618,13 +629,16 @@ class VideoRecorder(
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
         val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 context.display?.rotation
             } else {
                 @Suppress("DEPRECATION")
                 windowManager.defaultDisplay?.rotation
             } ?: displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
+            AppLogger.log(TAG, "safeDisplayRotation() -> $rotation")
+            rotation
         } catch (_: Exception) {
+            AppLogger.log(TAG, "safeDisplayRotation() failed; using lastKnownDisplayRotation=$lastKnownDisplayRotation")
             lastKnownDisplayRotation
         }
     }
@@ -632,6 +646,7 @@ class VideoRecorder(
     private fun resolveTargetSize(rotation: Int): Size {
         val isPortrait = rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180
         val desired = if (isPortrait) Size(HEIGHT, WIDTH) else Size(WIDTH, HEIGHT)
+        AppLogger.log(TAG, "resolveTargetSize(): rotation=$rotation isPortrait=$isPortrait desired=${desired.width}x${desired.height}")
         val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
             CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
         } ?: return desired
@@ -669,6 +684,7 @@ class VideoRecorder(
                     else -> Surface.ROTATION_0
                 }
 
+                AppLogger.log(TAG, "Sensor orientation=$orientation -> displayRotation=$displayRotation")
                 if (lastKnownDisplayRotation == displayRotation) return
                 lastKnownDisplayRotation = displayRotation
                 AppLogger.log(TAG, "Rotation changed to $displayRotation. Restarting camera...")
