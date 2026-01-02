@@ -29,6 +29,7 @@ import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 
 class VideoRecorder(
@@ -70,6 +71,8 @@ class VideoRecorder(
     @Volatile private var pendingDisplayRotation: Int? = null
     private var orientationListener: OrientationEventListener? = null
     private val isAudioStopping = AtomicBoolean(false)
+    private val videoLoopToken = AtomicInteger(0)
+    private val audioLoopToken = AtomicInteger(0)
     private val rotationHandler = Handler(Looper.getMainLooper())
     private val rotationDebounceMs = 250L
     private val applyRotationChange = Runnable {
@@ -453,22 +456,25 @@ class VideoRecorder(
 
     private fun startEncodingLoop() {
         executor.submit {
+            val codec = mediaCodec ?: return@submit
+            val token = videoLoopToken.incrementAndGet()
             val bufferInfo = MediaCodec.BufferInfo()
-            while (isRecording && mediaCodec != null) {
+            while (isRecording && token == videoLoopToken.get()) {
+                if (mediaCodec !== codec) break
                 try {
-                    val encoderStatus = mediaCodec?.dequeueOutputBuffer(bufferInfo, 10000) ?: -1
+                    val encoderStatus = codec.dequeueOutputBuffer(bufferInfo, 10000)
 
                     if (encoderStatus >= 0) {
-                        val encodedData = mediaCodec?.getOutputBuffer(encoderStatus)
+                        val encodedData = codec.getOutputBuffer(encoderStatus)
                         if (encodedData != null) {
                             if (bufferInfo.size > 0) {
                                 CircularBuffer.addFrame(encodedData, bufferInfo, CircularBuffer.FrameType.VIDEO)
                             }
-                            mediaCodec?.releaseOutputBuffer(encoderStatus, false)
+                            codec.releaseOutputBuffer(encoderStatus, false)
                         }
                     } else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                         // This usually contains the CSD-0/CSD-1 (SPS/PPS) which are critical
-                        val newFormat = mediaCodec?.outputFormat
+                        val newFormat = codec.outputFormat
                         AppLogger.log(TAG, "Output format changed: $newFormat")
                         if (newFormat != null) {
                             CircularBuffer.videoFormat = newFormat
@@ -478,6 +484,7 @@ class VideoRecorder(
                 } catch (e: Exception) {
                     AppLogger.e(TAG, "Error in encoding loop", e)
                     AppLogger.log(TAG, "Video loop err: ${e.message}")
+                    break
                 }
             }
         }
@@ -515,28 +522,32 @@ class VideoRecorder(
         }
         
         executor.submit {
+            val recorder = audioRecord ?: return@submit
+            val codec = audioCodec ?: return@submit
+            val token = audioLoopToken.incrementAndGet()
             // Fix: Set Thread Priority to URGENT_AUDIO
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             AppLogger.log(TAG, "Audio Loop Thread Started (Urgent)")
             
             try {
-                audioRecord?.startRecording()
+                recorder.startRecording()
                 val bufferInfo = MediaCodec.BufferInfo()
                 
                 // Keep audio timestamps on the same monotonic clock as video
                 var audioPresentationTimeUs = System.nanoTime() / 1000
                 
-                while (isRecording && audioCodec != null) {
+                while (isRecording && token == audioLoopToken.get()) {
+                    if (audioCodec !== codec) break
                     // 1. Read PCM from Mic -> Input Buffer
-                    val inputBufferIndex = audioCodec?.dequeueInputBuffer(10000) ?: -1
+                    val inputBufferIndex = codec.dequeueInputBuffer(10000)
                     if (inputBufferIndex >= 0) {
-                        val inputBuffer = audioCodec?.getInputBuffer(inputBufferIndex)
+                        val inputBuffer = codec.getInputBuffer(inputBufferIndex)
                         if (inputBuffer != null) {
                             inputBuffer.clear()
-                            val readBytes = audioRecord?.read(inputBuffer, inputBuffer.remaining()) ?: 0
+                            val readBytes = recorder.read(inputBuffer, inputBuffer.remaining())
                             
                             if (readBytes > 0) {
-                                audioCodec?.queueInputBuffer(inputBufferIndex, 0, readBytes, audioPresentationTimeUs, 0)
+                                codec.queueInputBuffer(inputBufferIndex, 0, readBytes, audioPresentationTimeUs, 0)
                                 
                                 // Calculate duration of this chunk in microseconds
                                 // bytes * 1_000_000 / (SampleRate * Channels * BytesPerSample)
@@ -549,17 +560,17 @@ class VideoRecorder(
                     }
                     
                     // 2. Read AAC from Output Buffer -> CircularBuffer
-                    val outputBufferIndex = audioCodec?.dequeueOutputBuffer(bufferInfo, 10000) ?: -1
+                    val outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 10000)
                     if (outputBufferIndex >= 0) {
-                         val encodedData = audioCodec?.getOutputBuffer(outputBufferIndex)
+                         val encodedData = codec.getOutputBuffer(outputBufferIndex)
                          if (encodedData != null) {
                              if (bufferInfo.size > 0) {
                                  CircularBuffer.addFrame(encodedData, bufferInfo, CircularBuffer.FrameType.AUDIO)
                              }
-                             audioCodec?.releaseOutputBuffer(outputBufferIndex, false)
+                             codec.releaseOutputBuffer(outputBufferIndex, false)
                          }
                     } else if (outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        val newFormat = audioCodec?.outputFormat
+                        val newFormat = codec.outputFormat
                         if (newFormat != null) {
                             CircularBuffer.audioFormat = newFormat
                             AppLogger.log(TAG, "Audio Format Changed (Captured): $newFormat")
@@ -622,6 +633,8 @@ class VideoRecorder(
         AppLogger.log(TAG, "stopCamera() called")
         isRecording = false
         isStarting = false
+        videoLoopToken.incrementAndGet()
+        audioLoopToken.incrementAndGet()
         // Stop audio first to avoid blocking writes during teardown
         shutdownAudio("stopCamera")
         try {
