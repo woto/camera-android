@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.animation.AnimatedVisibility
@@ -31,6 +33,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -656,8 +659,16 @@ fun CameraScreen(
         }
 
         // Centered simulate button keeps main view unobstructed
-        CompactButton(
-            text = AppStrings.get("simulate_save", language),
+        val shutterSize = 72.dp
+        val shutterBorderWidth = 3.dp
+        val shutterInteraction = remember { MutableInteractionSource() }
+        val isShutterPressed by shutterInteraction.collectIsPressedAsState()
+        val shutterScale by animateFloatAsState(
+            targetValue = if (isShutterPressed) 0.92f else 1f,
+            animationSpec = tween(durationMillis = 120),
+            label = "shutterScale"
+        )
+        Button(
             onClick = { 
                 if (recorder == null) {
                     onEditRoom()
@@ -667,13 +678,18 @@ fun CameraScreen(
                     NetworkClient.sendTrigger(roomId)
                 }
             },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            fontSize = 15.sp,
-            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
+            shape = CircleShape,
+            border = BorderStroke(shutterBorderWidth, Color.White),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+            contentPadding = PaddingValues(0.dp),
+            interactionSource = shutterInteraction,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 18.dp)
-        )
+                .align(Alignment.Center)
+                .size(shutterSize)
+                .scale(shutterScale)
+        ) {
+            Box(modifier = Modifier.fillMaxSize())
+        }
     }
 }
 

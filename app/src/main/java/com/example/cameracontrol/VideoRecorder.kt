@@ -7,7 +7,7 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
-import android.media.MediaActionSound
+import android.media.ToneGenerator
 import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.os.Build
@@ -53,10 +53,7 @@ class VideoRecorder(
     private val executor: ExecutorService = Executors.newFixedThreadPool(3)
     private var boundPreviewProvider: Preview.SurfaceProvider? = null
     private var torchState: Boolean? = null
-    private val shutterSound: MediaActionSound = MediaActionSound().apply {
-        // Preload to avoid latency on first play
-        load(MediaActionSound.SHUTTER_CLICK)
-    }
+    private val shutterTone: ToneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 80)
     private var activeWidth = WIDTH
     private var activeHeight = HEIGHT
     @Volatile private var sessionRotationDegrees: Int = 0
@@ -313,7 +310,7 @@ class VideoRecorder(
                 cam.cameraControl.enableTorch(true)
                 torchState = true
                 if (!isShutterSoundReleased) {
-                    shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+                    shutterTone.startTone(ToneGenerator.TONE_PROP_BEEP2, 160)
                 }
                 mainHandler.postDelayed({
                     if (wasEnabled) {
@@ -669,7 +666,7 @@ class VideoRecorder(
         } catch (_: Exception) { }
         try {
             if (!isShutterSoundReleased) {
-                shutterSound.release()
+                shutterTone.release()
                 isShutterSoundReleased = true
             }
         } catch (_: Exception) { }
