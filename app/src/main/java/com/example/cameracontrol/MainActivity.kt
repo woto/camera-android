@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
@@ -321,6 +322,7 @@ fun CameraScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val uriHandler = LocalUriHandler.current
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
 
     // Permission State
@@ -339,7 +341,6 @@ fun CameraScreen(
             }
         }
     )
-
     LaunchedEffect(Unit) {
         BufferManager.initialize(context)
         AppLogger.log(TAG, "App Started. Checking Permissions...")
@@ -359,6 +360,7 @@ fun CameraScreen(
     var isExiting by remember { mutableStateOf(false) }
     var wasForegroundRecording by remember { mutableStateOf(false) }
     val isForegroundRecording by CameraForegroundService.foregroundState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Handle Service Binding based on isCameraEnabled and permissions
     DisposableEffect(hasPermissions) {
@@ -433,6 +435,19 @@ fun CameraScreen(
     LaunchedEffect(zoomLinear) {
         delay(60)
         recorder?.setLinearZoom(zoomLinear)
+    }
+    
+    LaunchedEffect(Unit) {
+        NetworkClient.uploadStatus.collectLatest { status ->
+            val result = snackbarHostState.showSnackbar(
+                message = status.message,
+                actionLabel = if (status.eventUrl != null) "Открыть" else null,
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                status.eventUrl?.let { uriHandler.openUri(it) }
+            }
+        }
     }
 
     // Brief flash overlay whenever a WebSocket message is received
@@ -657,6 +672,13 @@ fun CameraScreen(
                     }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp)
+        )
 
         // Centered simulate button keeps main view unobstructed
         val shutterSize = 72.dp

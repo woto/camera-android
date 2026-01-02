@@ -1,6 +1,5 @@
 package com.example.cameracontrol
 
-import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import okhttp3.*
@@ -15,7 +14,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-
 object NetworkClient {
     private const val TAG = "NetworkClient"
     private val client = OkHttpClient.Builder()
@@ -36,6 +34,8 @@ object NetworkClient {
     val messageFlash = _messageFlash.asSharedFlow()
     private val _connectionStatus = MutableStateFlow(false)
     val connectionStatus = _connectionStatus.asStateFlow()
+    private val _uploadStatus = MutableSharedFlow<UploadStatus>(extraBufferCapacity = 1)
+    val uploadStatus = _uploadStatus.asSharedFlow()
 
     private var currentRoomId: String? = null
     
@@ -227,14 +227,35 @@ object NetworkClient {
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 AppLogger.log(TAG, "Upload Fail: ${e.message}")
+                _uploadStatus.tryEmit(UploadStatus(false, "Ошибка загрузки"))
                 onComplete() // Clean up even on fail
             }
 
             override fun onResponse(call: Call, response: Response) {
+                val bodyString = response.body?.string()
                 if (response.isSuccessful) {
                     AppLogger.log(TAG, "Upload Success: ${file.name}")
+                    if (!bodyString.isNullOrBlank()) {
+                        try {
+                            val json = JSONObject(bodyString)
+                            val eventUrl = json.optString("event_url", "")
+                            _uploadStatus.tryEmit(
+                                UploadStatus(
+                                    true,
+                                    "Ролик загружен",
+                                    eventUrl.ifBlank { null }
+                                )
+                            )
+                        } catch (e: Exception) {
+                            AppLogger.log(TAG, "Upload response parse error: ${e.message}")
+                            _uploadStatus.tryEmit(UploadStatus(true, "Ролик загружен"))
+                        }
+                    } else {
+                        _uploadStatus.tryEmit(UploadStatus(true, "Ролик загружен"))
+                    }
                 } else {
                     AppLogger.log(TAG, "Upload Err: ${response.code}")
+                    _uploadStatus.tryEmit(UploadStatus(false, "Ошибка загрузки"))
                 }
                 response.close()
                 onComplete()
@@ -242,3 +263,9 @@ object NetworkClient {
         })
     }
 }
+
+data class UploadStatus(
+    val success: Boolean,
+    val message: String,
+    val eventUrl: String? = null
+)

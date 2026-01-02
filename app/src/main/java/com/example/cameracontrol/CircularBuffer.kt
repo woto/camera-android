@@ -18,7 +18,7 @@ object CircularBuffer {
     private const val TAG = "CircularBuffer"
 
     // Config
-    private const val MAX_DURATION_US = 20_000_000L // 20 seconds
+    private const val MAX_DURATION_US = 5_000_000L // 5 seconds
 
     private val frames = ConcurrentLinkedDeque<EncodedFrame>()
 
