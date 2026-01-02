@@ -462,7 +462,6 @@ fun CameraScreen(
     }
 
     var zoomLinear by rememberSaveable { mutableFloatStateOf(0f) }
-    var orientationDebug by remember { mutableStateOf<String?>(null) }
     var lastAttachedRotation by remember { mutableStateOf<Int?>(null) }
     var lastSurfaceProviderId by remember { mutableStateOf<Int?>(null) }
 
@@ -559,13 +558,6 @@ fun CameraScreen(
         }
     }
 
-    LaunchedEffect(recorder) {
-        while (isActive) {
-            orientationDebug = recorder?.getOrientationDebugString()
-            delay(250)
-        }
-    }
-    
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         if (hasPermissions && recorder != null) {
             // Camera Preview
@@ -598,18 +590,6 @@ fun CameraScreen(
         } else {
              Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(AppStrings.get("starting_camera", language), color = Color.White)
-            }
-        }
-
-        if (orientationDebug != null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 10.dp, top = 56.dp, end = 10.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text(orientationDebug!!, color = Color.White, fontSize = 12.sp)
             }
         }
 
