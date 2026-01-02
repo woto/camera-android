@@ -22,10 +22,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -33,7 +42,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
@@ -494,79 +506,152 @@ fun CameraScreen(
             AppLogger.log(TAG, "Build Time: " + BuildConfig.BUILD_TIME)
         }
 
-        // Top compact actions
-        Row(
+        val edgePadding = 16.dp
+        val exitWrapperSize = 56.dp
+        val exitIconSize = 26.dp
+        val sliderWrapperWidth = exitWrapperSize
+        val sliderWrapperHeight = 260.dp
+        val sliderCornerRadius = 18.dp
+        val sliderVerticalPadding = 28.dp
+        val sliderHorizontalPadding = 10.dp
+        val sliderScale = 1.2f
+        val hintSlotWidth = 68.dp
+        val hintToSliderSpacing = 10.dp
+        val totalControlWidth = sliderWrapperWidth + hintSlotWidth + hintToSliderSpacing
+        val sliderOffsetY = (
+            edgePadding
+                + exitWrapperSize
+                + ((maxHeight - edgePadding - exitWrapperSize - sliderWrapperHeight) / 2)
+        ).coerceAtLeast(0.dp)
+
+        val sliderInteraction = remember { MutableInteractionSource() }
+        var isDragging by remember { mutableStateOf(false) }
+        var labelHeightPx by remember { mutableStateOf(0) }
+
+        Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .align(Alignment.TopEnd)
+                .padding(end = edgePadding, top = edgePadding)
         ) {
-            CompactButton(
-                text = AppStrings.get("exit", language),
-                onClick = {
-                    isExiting = true
-                    val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
-                        action = CameraForegroundService.ACTION_STOP
+            Box(
+                modifier = Modifier
+                    .size(exitWrapperSize)
+                    .background(Color.Black.copy(alpha = 0.25f), CircleShape)
+                    .clip(CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                IconButton(
+                    modifier = Modifier.fillMaxSize(),
+                    onClick = {
+                        isExiting = true
+                        val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
+                            action = CameraForegroundService.ACTION_STOP
+                        }
+                        context.startService(stopIntent)
+                        activity?.finishAndRemoveTask() ?: activity?.finish()
                     }
-                    context.startService(stopIntent)
-                    activity?.finishAndRemoveTask() ?: activity?.finish()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = AppStrings.get("exit", language),
+                        tint = Color.White,
+                        modifier = Modifier.size(exitIconSize)
+                    )
                 }
-            )
+            }
         }
 
-        // Right side zoom control to keep center clear
-        if (recorder != null) {
-            val edgePadding = 16.dp
-            val minDimension = if (maxWidth < maxHeight) maxWidth else maxHeight
-            val zoomTrackHeight = (minDimension * 0.8f - edgePadding * 2)
-                .coerceAtLeast(0.dp)
-            val sliderInteraction = remember { MutableInteractionSource() }
-            var isDragging by remember { mutableStateOf(false) }
-
-            LaunchedEffect(sliderInteraction) {
-                sliderInteraction.interactions.collect { interaction ->
-                    when (interaction) {
-                        is DragInteraction.Start -> isDragging = true
-                        is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = edgePadding)
+                .offset(y = sliderOffsetY)
+        ) {
+            if (recorder != null) {
+                LaunchedEffect(sliderInteraction) {
+                    sliderInteraction.interactions.collect { interaction ->
+                        when (interaction) {
+                            is DragInteraction.Start -> isDragging = true
+                            is DragInteraction.Stop, is DragInteraction.Cancel -> isDragging = false
+                        }
                     }
                 }
             }
 
             Row(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(horizontal = 8.dp, vertical = edgePadding)
-                    .height(zoomTrackHeight),
+                modifier = Modifier.width(totalControlWidth),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
-                if (isDragging) {
-                    Text(
-                        text = "${AppStrings.get("zoom", language)} ${(zoomLinear * 100).roundToInt()}%",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
+                Box(
+                    modifier = Modifier
+                        .width(hintSlotWidth)
+                        .height(sliderWrapperHeight)
+                        .padding(vertical = sliderVerticalPadding),
+                    contentAlignment = Alignment.TopEnd
+                ) {
+                    if (recorder != null) {
+                        val labelHeight = with(LocalDensity.current) { labelHeightPx.toDp() }
+                        val sliderAreaHeight = sliderWrapperHeight - (sliderVerticalPadding * 2)
+                        val scaledRange = sliderAreaHeight * sliderScale
+                        val extraOffset = (scaledRange - sliderAreaHeight) / 2
+                        val maxOffset = (scaledRange - labelHeight).coerceAtLeast(0.dp)
+                        val labelOffset = (maxOffset * (1f - zoomLinear)) - extraOffset - 4.dp
+
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = isDragging,
+                            enter = fadeIn(tween(140)) + scaleIn(
+                                tween(140),
+                                initialScale = 0.96f
+                            ),
+                            exit = fadeOut(tween(140)) + scaleOut(
+                                tween(140),
+                                targetScale = 0.96f
+                            )
+                        ) {
+                            Text(
+                                text = "${(zoomLinear * 100).roundToInt()}%",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                modifier = Modifier
+                                    .offset(y = labelOffset)
+                                    .background(
+                                        Color.Black.copy(alpha = 0.35f),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .onSizeChanged { size -> labelHeightPx = size.height }
+                            )
+                        }
+                    }
                 }
+
+                Spacer(modifier = Modifier.width(hintToSliderSpacing))
 
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .width(72.dp),
+                        .width(sliderWrapperWidth)
+                        .height(sliderWrapperHeight)
+                        .background(Color.Black.copy(alpha = 0.25f), RoundedCornerShape(sliderCornerRadius))
+                        .clip(RoundedCornerShape(sliderCornerRadius))
+                        .padding(
+                            horizontal = sliderHorizontalPadding,
+                            vertical = sliderVerticalPadding
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Slider(
-                        value = zoomLinear,
-                        onValueChange = { value -> zoomLinear = value },
-                        interactionSource = sliderInteraction,
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .verticalSlider()
-                            .scale(1.35f)
-                    )
-                }
+                    if (recorder != null) {
+                            Slider(
+                                value = zoomLinear,
+                                onValueChange = { value -> zoomLinear = value },
+                                interactionSource = sliderInteraction,
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .verticalSlider()
+                                    .scale(sliderScale)
+                            )
+                        }
+                    }
             }
         }
 
