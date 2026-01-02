@@ -372,9 +372,11 @@ fun CameraScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val currentRecorder by rememberUpdatedState(recorder)
+    val wsGraceStartMs = remember { SystemClock.elapsedRealtime() }
     var lastAlertAt by remember { mutableLongStateOf(0L) }
     var wasFlat by remember { mutableStateOf(false) }
     var lastConnectionState by remember { mutableStateOf<Boolean?>(null) }
+    val wsGraceMs = 5000L
     val alertCooldownMs = 4000L
     val alertIntervalMs = 5000L
     var flatAlertJob by remember { mutableStateOf<Job?>(null) }
@@ -546,11 +548,14 @@ fun CameraScreen(
     LaunchedEffect(Unit) {
         NetworkClient.connectionStatus.collectLatest { isConnected ->
             if (!isConnected && lastConnectionState != false) {
-                startRepeatingAlert(
-                    AppStrings.get("alert_ws_disconnected", language),
-                    { wsAlertJob = it },
-                    wsAlertJob
-                )
+                val elapsed = SystemClock.elapsedRealtime() - wsGraceStartMs
+                if (elapsed >= wsGraceMs) {
+                    startRepeatingAlert(
+                        AppStrings.get("alert_ws_disconnected", language),
+                        { wsAlertJob = it },
+                        wsAlertJob
+                    )
+                }
             } else if (isConnected) {
                 stopRepeatingAlert(wsAlertJob) { wsAlertJob = it }
             }

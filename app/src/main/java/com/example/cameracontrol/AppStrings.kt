@@ -89,7 +89,7 @@ object AppStrings {
             "language_label" to "Language",
             "website_label" to "Website",
             "alert_phone_flat" to "Phone is lying flat.",
-            "alert_ws_disconnected" to "WebSocket connection lost."
+            "alert_ws_disconnected" to "No connection to server."
         ),
         AppLanguage.ZH to mapOf(
             "welcome" to "欢迎",
@@ -110,7 +110,7 @@ object AppStrings {
             "language_label" to "语言",
             "website_label" to "网站",
             "alert_phone_flat" to "手机正平放。",
-            "alert_ws_disconnected" to "WebSocket 连接已断开。"
+            "alert_ws_disconnected" to "未连接到服务器。"
         ),
         AppLanguage.ES to mapOf(
             "welcome" to "Bienvenido",
@@ -132,7 +132,7 @@ object AppStrings {
             "language_label" to "Idioma",
             "website_label" to "Sitio web",
             "alert_phone_flat" to "El teléfono está en posición plana.",
-            "alert_ws_disconnected" to "Se perdió la conexión WebSocket."
+            "alert_ws_disconnected" to "No hay conexión con el servidor."
         ),
         AppLanguage.AR to mapOf(
             "welcome" to "مرحبًا",
@@ -154,7 +154,7 @@ object AppStrings {
             "language_label" to "اللغة",
             "website_label" to "الموقع",
             "alert_phone_flat" to "الهاتف موضوع بشكل مسطح.",
-            "alert_ws_disconnected" to "تم فقد اتصال WebSocket."
+            "alert_ws_disconnected" to "لا يوجد اتصال بالخادم."
         ),
         AppLanguage.HI to mapOf(
             "welcome" to "स्वागत है",
@@ -176,7 +176,7 @@ object AppStrings {
             "language_label" to "भाषा",
             "website_label" to "वेबसाइट",
             "alert_phone_flat" to "फ़ोन समतल रखा है।",
-            "alert_ws_disconnected" to "WebSocket कनेक्शन खो गया है।"
+            "alert_ws_disconnected" to "सर्वर से कनेक्शन नहीं है।"
         ),
         AppLanguage.BN to mapOf(
             "welcome" to "স্বাগতম",
@@ -198,7 +198,7 @@ object AppStrings {
             "language_label" to "ভাষা",
             "website_label" to "ওয়েবসাইট",
             "alert_phone_flat" to "ফোনটি সমতল অবস্থায় আছে।",
-            "alert_ws_disconnected" to "WebSocket সংযোগ বিচ্ছিন্ন হয়েছে।"
+            "alert_ws_disconnected" to "সার্ভারের সাথে সংযোগ নেই।"
         ),
         AppLanguage.KO to mapOf(
             "welcome" to "환영합니다",
@@ -220,7 +220,7 @@ object AppStrings {
             "language_label" to "언어",
             "website_label" to "웹사이트",
             "alert_phone_flat" to "휴대폰이 평평하게 놓여 있습니다.",
-            "alert_ws_disconnected" to "WebSocket 연결이 끊겼습니다."
+            "alert_ws_disconnected" to "서버와 연결되어 있지 않습니다."
         ),
         AppLanguage.ID to mapOf(
             "welcome" to "Selamat datang",
@@ -242,7 +242,7 @@ object AppStrings {
             "language_label" to "Bahasa",
             "website_label" to "Situs web",
             "alert_phone_flat" to "Ponsel sedang terletak datar.",
-            "alert_ws_disconnected" to "Koneksi WebSocket terputus."
+            "alert_ws_disconnected" to "Tidak ada koneksi ke сервер."
         ),
         AppLanguage.PT to mapOf(
             "welcome" to "Bem-vindo",
@@ -264,7 +264,7 @@ object AppStrings {
             "language_label" to "Idioma",
             "website_label" to "Site",
             "alert_phone_flat" to "O telefone está deitado.",
-            "alert_ws_disconnected" to "Conexão WebSocket perdida."
+            "alert_ws_disconnected" to "Sem conexão com o servidor."
         ),
         AppLanguage.FR to mapOf(
             "welcome" to "Bienvenue",
@@ -286,7 +286,7 @@ object AppStrings {
             "language_label" to "Langue",
             "website_label" to "Site web",
             "alert_phone_flat" to "Le téléphone est posé à plat.",
-            "alert_ws_disconnected" to "Connexion WebSocket perdue."
+            "alert_ws_disconnected" to "Pas de connexion au serveur."
         ),
         AppLanguage.IT to mapOf(
             "welcome" to "Benvenuto",
@@ -308,7 +308,7 @@ object AppStrings {
             "language_label" to "Lingua",
             "website_label" to "Sito web",
             "alert_phone_flat" to "Il telefono è appoggiato in piano.",
-            "alert_ws_disconnected" to "Connessione WebSocket persa."
+            "alert_ws_disconnected" to "Nessuna connessione al server."
         ),
         AppLanguage.JA to mapOf(
             "welcome" to "ようこそ",
@@ -330,7 +330,7 @@ object AppStrings {
             "language_label" to "言語",
             "website_label" to "ウェブサイト",
             "alert_phone_flat" to "スマホが平置きです。",
-            "alert_ws_disconnected" to "WebSocket 接続が切れました。"
+            "alert_ws_disconnected" to "サーバーへの接続がありません。"
         ),
         AppLanguage.TR to mapOf(
             "welcome" to "Hoş geldiniz",
@@ -352,7 +352,7 @@ object AppStrings {
             "language_label" to "Dil",
             "website_label" to "Web sitesi",
             "alert_phone_flat" to "Telefon düz duruyor.",
-            "alert_ws_disconnected" to "WebSocket bağlantısı koptu."
+            "alert_ws_disconnected" to "Sunucu bağlantısı yok."
         ),
         AppLanguage.VI to mapOf(
             "welcome" to "Chào mừng",
@@ -374,7 +374,7 @@ object AppStrings {
             "language_label" to "Ngôn ngữ",
             "website_label" to "Trang web",
             "alert_phone_flat" to "Điện thoại đang nằm phẳng.",
-            "alert_ws_disconnected" to "Mất kết nối WebSocket."
+            "alert_ws_disconnected" to "Không có kết nối tới máy chủ."
         ),
         AppLanguage.TH to mapOf(
             "welcome" to "ยินดีต้อนรับ",
@@ -396,7 +396,7 @@ object AppStrings {
             "language_label" to "ภาษา",
             "website_label" to "เว็บไซต์",
             "alert_phone_flat" to "โทรศัพท์วางราบอยู่.",
-            "alert_ws_disconnected" to "การเชื่อมต่อ WebSocket หลุดแล้ว."
+            "alert_ws_disconnected" to "ไม่มีการเชื่อมต่อกับเซิร์ฟเวอร์."
         ),
         AppLanguage.RU to mapOf(
             "welcome" to "Добро пожаловать",
@@ -440,7 +440,7 @@ object AppStrings {
             "language_label" to "Sprache",
             "website_label" to "Webseite",
             "alert_phone_flat" to "Das Telefon liegt flach.",
-            "alert_ws_disconnected" to "WebSocket-Verbindung verloren."
+            "alert_ws_disconnected" to "Keine Verbindung zum Server."
         ),
         AppLanguage.PL to mapOf(
             "welcome" to "Witamy",
@@ -462,7 +462,7 @@ object AppStrings {
             "language_label" to "Język",
             "website_label" to "Strona",
             "alert_phone_flat" to "Telefon leży na płasko.",
-            "alert_ws_disconnected" to "Utracono połączenie WebSocket."
+            "alert_ws_disconnected" to "Brak połączenia z serwerem."
         ),
         AppLanguage.NL to mapOf(
             "welcome" to "Welkom",
@@ -484,7 +484,7 @@ object AppStrings {
             "language_label" to "Taal",
             "website_label" to "Website",
             "alert_phone_flat" to "De telefoon ligt plat.",
-            "alert_ws_disconnected" to "WebSocket-verbinding verloren."
+            "alert_ws_disconnected" to "Geen verbinding met de server."
         ),
         AppLanguage.UR to mapOf(
             "welcome" to "خوش آمدید",
@@ -506,7 +506,7 @@ object AppStrings {
             "language_label" to "زبان",
             "website_label" to "ویب سائٹ",
             "alert_phone_flat" to "فون سیدھا رکھا ہوا ہے۔",
-            "alert_ws_disconnected" to "WebSocket کنکشن ختم ہو گیا ہے۔"
+            "alert_ws_disconnected" to "سرور سے کنکشن نہیں ہے۔"
         ),
         AppLanguage.FA to mapOf(
             "welcome" to "خوش آمدید",
@@ -528,7 +528,7 @@ object AppStrings {
             "language_label" to "زبان",
             "website_label" to "وب‌سایت",
             "alert_phone_flat" to "گوشی به صورت صاف قرار دارد.",
-            "alert_ws_disconnected" to "اتصال WebSocket قطع شد."
+            "alert_ws_disconnected" to "اتصال به سرور وجود ندارد."
         ),
         AppLanguage.SR to mapOf(
             "welcome" to "Dobro došli",
@@ -550,7 +550,7 @@ object AppStrings {
             "language_label" to "Jezik",
             "website_label" to "Veb-sajt",
             "alert_phone_flat" to "Telefon je položen ravno.",
-            "alert_ws_disconnected" to "WebSocket veza je prekinuta."
+            "alert_ws_disconnected" to "Nema veze sa serverom."
         )
     )
 }
