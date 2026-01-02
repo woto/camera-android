@@ -7,8 +7,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -66,7 +71,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlin.math.abs
 import java.util.Locale
 
 private const val TAG = "MainActivity"
@@ -360,7 +368,50 @@ fun CameraScreen(
     var isExiting by remember { mutableStateOf(false) }
     var wasForegroundRecording by remember { mutableStateOf(false) }
     val isForegroundRecording by CameraForegroundService.foregroundState.collectAsState()
+    val recorder = cameraService?.getRecorder()
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val currentRecorder by rememberUpdatedState(recorder)
+    var lastAlertAt by remember { mutableLongStateOf(0L) }
+    var wasFlat by remember { mutableStateOf(false) }
+    var lastConnectionState by remember { mutableStateOf<Boolean?>(null) }
+    val alertCooldownMs = 4000L
+    val alertIntervalMs = 5000L
+    var flatAlertJob by remember { mutableStateOf<Job?>(null) }
+    var wsAlertJob by remember { mutableStateOf<Job?>(null) }
+
+    fun triggerAlert(message: String, useCooldown: Boolean = true) {
+        val now = SystemClock.elapsedRealtime()
+        if (useCooldown) {
+            if (now - lastAlertAt < alertCooldownMs) return
+            lastAlertAt = now
+        }
+        currentRecorder?.playAlertTone()
+        currentRecorder?.blinkTorch()
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
+    fun startRepeatingAlert(target: String, jobHolder: (Job?) -> Unit, existingJob: Job?) {
+        if (existingJob?.isActive == true) return
+        val job = coroutineScope.launch {
+            triggerAlert(target, useCooldown = false)
+            while (isActive) {
+                delay(alertIntervalMs)
+                triggerAlert(target, useCooldown = false)
+            }
+        }
+        jobHolder(job)
+    }
+
+    fun stopRepeatingAlert(existingJob: Job?, jobHolder: (Job?) -> Unit) {
+        existingJob?.cancel()
+        jobHolder(null)
+    }
 
     // Handle Service Binding based on isCameraEnabled and permissions
     DisposableEffect(hasPermissions) {
@@ -410,7 +461,6 @@ fun CameraScreen(
         }
     }
 
-    val recorder = cameraService?.getRecorder()
     var zoomLinear by rememberSaveable { mutableFloatStateOf(0f) }
     var orientationDebug by remember { mutableStateOf<String?>(null) }
     var lastAttachedRotation by remember { mutableStateOf<Int?>(null) }
@@ -450,6 +500,42 @@ fun CameraScreen(
         }
     }
 
+    DisposableEffect(hasPermissions, recorder, language) {
+        if (!hasPermissions || recorder == null) return@DisposableEffect onDispose { }
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val sensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (sensor == null) return@DisposableEffect onDispose { }
+        val flatZThreshold = 8f
+        val flatXYThreshold = 3f
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (event.values.size < 3) return
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+                val isFlat = abs(z) > flatZThreshold && abs(x) < flatXYThreshold && abs(y) < flatXYThreshold
+                if (isFlat && !wasFlat) {
+                    startRepeatingAlert(
+                        AppStrings.get("alert_phone_flat", language),
+                        { flatAlertJob = it },
+                        flatAlertJob
+                    )
+                } else if (!isFlat && wasFlat) {
+                    stopRepeatingAlert(flatAlertJob) { flatAlertJob = it }
+                }
+                wasFlat = isFlat
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+        onDispose {
+            sensorManager.unregisterListener(listener)
+            stopRepeatingAlert(flatAlertJob) { flatAlertJob = it }
+        }
+    }
+
     // Brief flash overlay whenever a WebSocket message is received
     LaunchedEffect(recorder) {
         recorder ?: return@LaunchedEffect
@@ -458,10 +544,18 @@ fun CameraScreen(
         }
     }
     
-    LaunchedEffect(recorder) {
-        recorder ?: return@LaunchedEffect
+    LaunchedEffect(Unit) {
         NetworkClient.connectionStatus.collectLatest { isConnected ->
-            recorder.setTorchEnabled(!isConnected)
+            if (!isConnected && lastConnectionState != false) {
+                startRepeatingAlert(
+                    AppStrings.get("alert_ws_disconnected", language),
+                    { wsAlertJob = it },
+                    wsAlertJob
+                )
+            } else if (isConnected) {
+                stopRepeatingAlert(wsAlertJob) { wsAlertJob = it }
+            }
+            lastConnectionState = isConnected
         }
     }
 

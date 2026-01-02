@@ -70,6 +70,7 @@ class VideoRecorder(
     private val isAudioStopping = AtomicBoolean(false)
     private val videoLoopToken = AtomicInteger(0)
     private val audioLoopToken = AtomicInteger(0)
+    private val torchBlinking = AtomicBoolean(false)
     private val rotationHandler = Handler(Looper.getMainLooper())
     private val rotationDebounceMs = 250L
     private val applyRotationChange = Runnable {
@@ -324,6 +325,63 @@ class VideoRecorder(
             } catch (e: Exception) {
                 AppLogger.log(TAG, "Torch error: ${e.message}")
             }
+        }
+    }
+
+    fun blinkTorch(pulses: Int = 3, onMs: Long = 120, offMs: Long = 120) {
+        val cam = camera ?: run {
+            AppLogger.log(TAG, "Torch skipped: camera not ready")
+            return
+        }
+        val info = cam.cameraInfo
+        if (!info.hasFlashUnit()) {
+            AppLogger.log(TAG, "Torch unavailable on this device")
+            return
+        }
+        if (!torchBlinking.compareAndSet(false, true)) {
+            AppLogger.log(TAG, "Torch blink skipped: already blinking")
+            return
+        }
+        val mainHandler = Handler(Looper.getMainLooper())
+        mainHandler.post {
+            val wasEnabled = torchState == true
+            val totalSteps = (pulses.coerceAtLeast(1) * 2)
+            var step = 0
+            val runner = object : Runnable {
+                override fun run() {
+                    if (step >= totalSteps) {
+                        try {
+                            cam.cameraControl.enableTorch(wasEnabled)
+                            torchState = wasEnabled
+                        } catch (e: Exception) {
+                            AppLogger.log(TAG, "Torch restore error: ${e.message}")
+                        } finally {
+                            torchBlinking.set(false)
+                        }
+                        return
+                    }
+                    val enable = step % 2 == 0
+                    try {
+                        cam.cameraControl.enableTorch(enable)
+                        torchState = enable
+                    } catch (e: Exception) {
+                        AppLogger.log(TAG, "Torch blink error: ${e.message}")
+                    }
+                    val delay = if (enable) onMs else offMs
+                    step += 1
+                    mainHandler.postDelayed(this, delay)
+                }
+            }
+            runner.run()
+        }
+    }
+
+    fun playAlertTone(durationMs: Int = 320) {
+        if (isShutterSoundReleased) return
+        try {
+            shutterTone.startTone(ToneGenerator.TONE_PROP_BEEP2, durationMs)
+        } catch (e: Exception) {
+            AppLogger.log(TAG, "Alert tone error: ${e.message}")
         }
     }
 
