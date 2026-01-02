@@ -39,6 +39,7 @@ class CameraForegroundService : LifecycleService() {
     private lateinit var recorder: VideoRecorder
     private var wakeLock: PowerManager.WakeLock? = null
     private var hasStartedCamera = false
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (!this@CameraForegroundService::recorder.isInitialized) return
@@ -58,6 +59,9 @@ class CameraForegroundService : LifecycleService() {
         _foregroundState.value = true
         acquireWakeLock()
         recorder = VideoRecorder(applicationContext, this)
+        BufferManager.setOnClipSaved {
+            mainHandler.post { recorder.restartSession() }
+        }
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -112,6 +116,7 @@ class CameraForegroundService : LifecycleService() {
         if (this::recorder.isInitialized) {
             recorder.destroy()
         }
+        BufferManager.setOnClipSaved(null)
         NetworkClient.disconnectWebSocket()
         hasStartedCamera = false
         _foregroundState.value = false

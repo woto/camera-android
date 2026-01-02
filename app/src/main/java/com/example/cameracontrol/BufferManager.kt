@@ -11,6 +11,7 @@ object BufferManager {
     private lateinit var outputDir: File
     private lateinit var deviceId: String
     private var rotationProvider: (() -> Int)? = null
+    private var onClipSaved: (() -> Unit)? = null
 
     fun initialize(context: android.content.Context) {
         outputDir = context.cacheDir
@@ -19,6 +20,10 @@ object BufferManager {
 
     fun setRotationProvider(provider: () -> Int) {
         rotationProvider = provider
+    }
+
+    fun setOnClipSaved(callback: (() -> Unit)?) {
+        onClipSaved = callback
     }
 
     fun triggerUpload(triggerTimestamp: String? = null) {
@@ -138,6 +143,7 @@ object BufferManager {
                 muxer.release()
             }
             AppLogger.log(TAG, "Muxer stopped and released")
+            onClipSaved?.invoke()
             
         AppLogger.log(TAG, "Saved MP4: ${outputFile.length()} bytes")
 

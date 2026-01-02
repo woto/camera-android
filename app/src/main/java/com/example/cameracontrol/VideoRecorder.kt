@@ -71,6 +71,8 @@ class VideoRecorder(
     private val videoLoopToken = AtomicInteger(0)
     private val audioLoopToken = AtomicInteger(0)
     private val torchBlinking = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var torchBlinkRunnable: Runnable? = null
     private val rotationHandler = Handler(Looper.getMainLooper())
     private val rotationDebounceMs = 250L
     private val applyRotationChange = Runnable {
@@ -300,7 +302,6 @@ class VideoRecorder(
             AppLogger.log(TAG, "Torch unavailable on this device")
             return
         }
-        val mainHandler = Handler(Looper.getMainLooper())
         mainHandler.post {
             try {
                 val wasEnabled = torchState == true
@@ -342,7 +343,6 @@ class VideoRecorder(
             AppLogger.log(TAG, "Torch blink skipped: already blinking")
             return
         }
-        val mainHandler = Handler(Looper.getMainLooper())
         mainHandler.post {
             val wasEnabled = torchState == true
             val totalSteps = (pulses.coerceAtLeast(1) * 2)
@@ -372,7 +372,24 @@ class VideoRecorder(
                     mainHandler.postDelayed(this, delay)
                 }
             }
+            torchBlinkRunnable = runner
             runner.run()
+        }
+    }
+
+    private fun cancelTorchBlink(reason: String) {
+        if (!torchBlinking.compareAndSet(true, false)) {
+            return
+        }
+        mainHandler.post {
+            torchBlinkRunnable?.let { mainHandler.removeCallbacks(it) }
+            torchBlinkRunnable = null
+            try {
+                camera?.cameraControl?.enableTorch(false)
+                torchState = false
+            } catch (e: Exception) {
+                AppLogger.log(TAG, "Torch cancel error ($reason): ${e.message}")
+            }
         }
     }
 
@@ -688,6 +705,7 @@ class VideoRecorder(
         AppLogger.log(TAG, "stopCamera() called")
         isRecording = false
         isStarting = false
+        cancelTorchBlink("stopCamera")
         videoLoopToken.incrementAndGet()
         audioLoopToken.incrementAndGet()
         // Stop audio first to avoid blocking writes during teardown
@@ -710,6 +728,16 @@ class VideoRecorder(
         // Keep shutter sound alive for quick restarts; release in destroy().
         try {
         } catch (_: Exception) { }
+    }
+
+    fun restartSession() {
+        AppLogger.log(TAG, "Restarting camera session...")
+        try {
+            stopCamera()
+            startCamera(boundPreviewProvider)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Restart session error", e)
+        }
     }
 
     fun destroy() {
