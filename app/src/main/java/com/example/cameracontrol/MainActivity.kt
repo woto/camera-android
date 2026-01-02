@@ -15,10 +15,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
@@ -127,80 +127,35 @@ enum class AppStep {
     CAMERA
 }
 
-// Simple Localization Helper
-object Strings {
-    fun get(id: String, isRussian: Boolean): String {
-        return if (isRussian) mapRu[id] ?: id else mapEn[id] ?: id
-    }
-
-    private val mapEn = mapOf(
-        "welcome" to "Welcome",
-        "intro_text" to """
-            This application is designed to record beautiful game moments in volleyball.
-
-            The application uses the camera. Recording can be done even with the screen off to save battery. Stop recording after you finish using the phone.
-        """.trimIndent(),
-        "ok" to "OK",
-        "room_id_title" to "Room ID",
-        "room_id_prompt" to "Enter the Room ID for this session:",
-        "permissions_required" to "Permissions Required!",
-        "camera_permissions_msg" to "Please grant camera and audio permissions to continue.",
-        "starting_camera" to "Starting camera service...",
-        "debug_logs" to "Debug Logs:",
-        "simulate_save" to "Save Recording",
-        "zoom" to "Zoom",
-        "simulate_save" to "Save Recording",
-        "zoom" to "Zoom",
-        "exit" to "Exit",
-        "privacy_disclaimer" to "By tapping OK, you agree to our",
-        "privacy_link" to "Privacy Policy"
-    )
-
-    private val mapRu = mapOf(
-        "welcome" to "Добро пожаловать",
-        "intro_text" to """
-            Данное приложение предназначено для записи красивых игровых моментов в волейболе.
-
-            Приложение использует камеру. Запись может осуществляться даже при выключенном экране с целью экономии батареи. Останавливайте запись после завершения использования телефона.
-        """.trimIndent(),
-        "ok" to "ОК",
-        "room_id_title" to "ID Комнаты",
-        "room_id_prompt" to "Введите ID комнаты для этой сессии:",
-        "permissions_required" to "Требуются разрешения!",
-        "camera_permissions_msg" to "Пожалуйста, предоставьте разрешения на камеру и аудио.",
-        "starting_camera" to "Запуск сервиса камеры...",
-        "debug_logs" to "Debug Логи:",
-        "simulate_save" to "Сохранить запись",
-        "zoom" to "Зум",
-        "simulate_save" to "Сохранить запись",
-        "zoom" to "Зум",
-        "exit" to "Выход",
-        "privacy_disclaimer" to "Нажимая ОК, вы принимаете",
-        "privacy_link" to "Политику конфиденциальности"
-    )
-}
-
 @Composable
 fun MainApp() {
     // 1. Fix: Use rememberSaveable for step to survive rotation
     var currentStep by rememberSaveable { mutableStateOf(AppStep.INTRO) }
     
-    // Check system locale for default, also saveable
-    val systemLocale = Locale.getDefault().language
-    var isRussian by rememberSaveable { mutableStateOf(systemLocale == "ru") }
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
+    val initialLanguage = remember {
+        AppLanguage.fromCode(prefs.getString("app_language", null))
+            ?: AppStrings.defaultLanguage(Locale.getDefault())
+    }
+    var languageCode by rememberSaveable { mutableStateOf(initialLanguage.code) }
+    val language = AppLanguage.fromCode(languageCode) ?: AppLanguage.EN
 
     when (currentStep) {
         AppStep.INTRO -> IntroScreen(
-            isRussian = isRussian,
-            onLanguageChange = { isRussian = it },
+            language = language,
+            onLanguageChange = { newLanguage ->
+                languageCode = newLanguage.code
+                prefs.edit { putString("app_language", newLanguage.code) }
+            },
             onNext = { currentStep = AppStep.ROOM_ID }
         )
         AppStep.ROOM_ID -> RoomIdScreen(
-            isRussian = isRussian,
+            language = language,
             onNext = { currentStep = AppStep.CAMERA }
         )
         AppStep.CAMERA -> CameraScreen(
-            isRussian = isRussian,
+            language = language,
             // 2. Fix: If user enables camera inside CameraScreen, they might want to change room
             // But if they are just toggling, we keep them here.
             // Wait, the requirement says: "When turning on the camera, first show the room form".
@@ -212,10 +167,12 @@ fun MainApp() {
 
 @Composable
 fun IntroScreen(
-    isRussian: Boolean,
-    onLanguageChange: (Boolean) -> Unit,
+    language: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit,
     onNext: () -> Unit
 ) {
+    val uriHandler = LocalUriHandler.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -224,54 +181,46 @@ fun IntroScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Image(
+            painter = painterResource(R.drawable.volleycam_icon),
+            contentDescription = null,
+            modifier = Modifier
+                .size(96.dp)
+                .padding(bottom = 16.dp)
+        )
+
         Text(
-            text = Strings.get("welcome", isRussian),
+            text = AppStrings.get("welcome", language),
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Button(
-                onClick = { onLanguageChange(true) },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isRussian) MaterialTheme.colorScheme.primary else Color.Gray
-                ),
-                modifier = Modifier.padding(end = 8.dp)
-            ) {
-                Text("Русский")
-            }
-            Button(
-                onClick = { onLanguageChange(false) },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (!isRussian) MaterialTheme.colorScheme.primary else Color.Gray
-                ),
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
-                Text("English")
-            }
-        }
-
-        Text(
-            text = Strings.get("intro_text", isRussian),
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        val uriHandler = LocalUriHandler.current
-        
         Column(
             modifier = Modifier.padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = Strings.get("privacy_disclaimer", isRussian),
+                text = AppStrings.get("website_label", language),
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+            TextButton(
+                onClick = { uriHandler.openUri("https://volleycam.com") },
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Text(
+                    text = "volleycam.com",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = AppStrings.get("privacy_disclaimer", language),
                 fontSize = 12.sp,
                 color = Color.Gray
             )
@@ -281,7 +230,7 @@ fun IntroScreen(
                 modifier = Modifier.height(30.dp)
             ) {
                 Text(
-                    text = Strings.get("privacy_link", isRussian),
+                    text = AppStrings.get("privacy_link", language),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -292,14 +241,15 @@ fun IntroScreen(
             onClick = onNext,
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
-            Text(Strings.get("ok", isRussian))
+            Text(AppStrings.get("ok", language))
         }
     }
 }
 
+
 @Composable
 fun RoomIdScreen(
-    isRussian: Boolean,
+    language: AppLanguage,
     onNext: () -> Unit
 ) {
     val context = LocalContext.current
@@ -314,14 +264,14 @@ fun RoomIdScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = Strings.get("room_id_title", isRussian),
+            text = AppStrings.get("room_id_title", language),
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
         
         Text(
-            text = Strings.get("room_id_prompt", isRussian),
+            text = AppStrings.get("room_id_prompt", language),
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -329,7 +279,7 @@ fun RoomIdScreen(
         OutlinedTextField(
             value = roomId,
             onValueChange = { roomId = it },
-            label = { Text(Strings.get("room_id_title", isRussian)) },
+            label = { Text(AppStrings.get("room_id_title", language)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
         )
@@ -342,7 +292,7 @@ fun RoomIdScreen(
             enabled = roomId.isEnabled(), // Blank check
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) {
-            Text(Strings.get("ok", isRussian))
+            Text(AppStrings.get("ok", language))
         }
     }
 }
@@ -351,7 +301,7 @@ private fun String.isEnabled(): Boolean = this.isNotBlank()
 
 @Composable
 fun CameraScreen(
-    isRussian: Boolean,
+    language: AppLanguage,
     onEditRoom: () -> Unit
 ) {
     val context = LocalContext.current
@@ -370,7 +320,7 @@ fun CameraScreen(
         onResult = { grantedMap ->
             hasPermissions = grantedMap.values.all { it }
             if (!hasPermissions) {
-                Toast.makeText(context, Strings.get("permissions_required", isRussian), Toast.LENGTH_LONG).show()
+                Toast.makeText(context, AppStrings.get("permissions_required", language), Toast.LENGTH_LONG).show()
             }
         }
     )
@@ -519,11 +469,11 @@ fun CameraScreen(
             )
         } else if (!hasPermissions) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(Strings.get("camera_permissions_msg", isRussian), color = Color.White)
+                Text(AppStrings.get("camera_permissions_msg", language), color = Color.White)
             }
         } else {
              Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(Strings.get("starting_camera", isRussian), color = Color.White)
+                Text(AppStrings.get("starting_camera", language), color = Color.White)
             }
         }
 
@@ -552,7 +502,7 @@ fun CameraScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             CompactButton(
-                text = Strings.get("exit", isRussian),
+                text = AppStrings.get("exit", language),
                 onClick = {
                     isExiting = true
                     val stopIntent = Intent(context, CameraForegroundService::class.java).apply {
@@ -592,7 +542,7 @@ fun CameraScreen(
             ) {
                 if (isDragging) {
                     Text(
-                        text = "${Strings.get("zoom", isRussian)} ${(zoomLinear * 100).roundToInt()}%",
+                        text = "${AppStrings.get("zoom", language)} ${(zoomLinear * 100).roundToInt()}%",
                         color = Color.White,
                         fontSize = 13.sp,
                         modifier = Modifier
@@ -622,7 +572,7 @@ fun CameraScreen(
 
         // Centered simulate button keeps main view unobstructed
         CompactButton(
-            text = Strings.get("simulate_save", isRussian),
+            text = AppStrings.get("simulate_save", language),
             onClick = { 
                 if (recorder == null) {
                     onEditRoom()
