@@ -54,6 +54,7 @@ class VideoRecorder(
     private var boundPreviewProvider: Preview.SurfaceProvider? = null
     private var torchState: Boolean? = null
     private val shutterTone: ToneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 80)
+    private val torchController = TorchController(context)
     private var activeWidth = WIDTH
     private var activeHeight = HEIGHT
     @Volatile private var sessionRotationDegrees: Int = 0
@@ -75,9 +76,23 @@ class VideoRecorder(
     @Volatile private var torchBlinkRunnable: Runnable? = null
     private val rotationHandler = Handler(Looper.getMainLooper())
     private val rotationDebounceMs = 250L
-    private val applyRotationChange = Runnable {
+    @Volatile private var torchPulseUntilMs: Long = 0L
+    private val torchPulseGuardMs = 250L
+    @Volatile private var restartPending: Boolean = false
+    private lateinit var applyRotationChange: Runnable
+    private val applyRotationChangeDelayMs = 50L
+    private val applyRotationChangeInit = {
+        applyRotationChange = Runnable {
         val rotation = pendingDisplayRotation ?: return@Runnable
         pendingDisplayRotation = null
+        val now = SystemClock.elapsedRealtime()
+        if (now < torchPulseUntilMs) {
+            val delayMs = (torchPulseUntilMs - now).coerceAtLeast(applyRotationChangeDelayMs)
+            AppLogger.log(TAG, "Rotation restart delayed for torch pulse (${delayMs}ms)")
+            pendingDisplayRotation = rotation
+            rotationHandler.postDelayed(applyRotationChange, delayMs)
+            return@Runnable
+        }
         val safeRotation = safeDisplayRotation()
         AppLogger.log(
             TAG,
@@ -94,6 +109,7 @@ class VideoRecorder(
         } catch (e: Exception) {
             AppLogger.e(TAG, "Error restarting camera on rotation", e)
             AppLogger.log(TAG, "Restart err: ${e.message}")
+        }
         }
     }
     
@@ -113,6 +129,9 @@ class VideoRecorder(
         private val PREFERRED_SAMPLE_RATES = listOf(48000, 44100, 32000, 16000)
     }
 
+    init {
+        applyRotationChangeInit()
+    }
 
     @Suppress("DEPRECATION")
     fun startCamera(surfaceProvider: Preview.SurfaceProvider? = null) {
@@ -292,104 +311,123 @@ class VideoRecorder(
         }
     }
 
+    private fun canUseCameraTorch(): Boolean {
+        val cam = camera ?: return false
+        return try {
+            cam.cameraInfo.hasFlashUnit()
+        } catch (e: Exception) {
+            AppLogger.log(TAG, "Torch capability check error: ${e.message}")
+            false
+        }
+    }
+
     fun pulseTorch(durationMs: Long = 200) {
-        val cam = camera ?: run {
-            AppLogger.log(TAG, "Torch skipped: camera not ready")
-            return
-        }
-        val info = cam.cameraInfo
-        if (!info.hasFlashUnit()) {
-            AppLogger.log(TAG, "Torch unavailable on this device")
-            return
-        }
-        mainHandler.post {
-            try {
-                val wasEnabled = torchState == true
-                if (wasEnabled) {
-                    cam.cameraControl.enableTorch(false)
-                    torchState = false
-                }
-                cam.cameraControl.enableTorch(true)
-                torchState = true
-                if (!isShutterSoundReleased) {
-                    shutterTone.startTone(ToneGenerator.TONE_PROP_BEEP2, 160)
-                }
-                mainHandler.postDelayed({
+        if (canUseCameraTorch()) {
+            val cam = camera ?: return
+            torchPulseUntilMs = SystemClock.elapsedRealtime() + durationMs + torchPulseGuardMs
+            AppLogger.log(TAG, "Torch pulse requested (durationMs=$durationMs)")
+            mainHandler.post {
+                try {
+                    val wasEnabled = torchState == true
+                    AppLogger.log(TAG, "Torch pulse start: wasEnabled=$wasEnabled currentState=${torchState ?: "unknown"}")
                     if (wasEnabled) {
-                        cam.cameraControl.enableTorch(true)
-                        torchState = true
-                    } else {
                         cam.cameraControl.enableTorch(false)
                         torchState = false
+                        AppLogger.log(TAG, "Torch pulse: forced OFF before ON")
                     }
-                }, durationMs.toLong())
+                    cam.cameraControl.enableTorch(true)
+                    torchState = true
+                    AppLogger.log(TAG, "Torch pulse: ON")
+                    mainHandler.postDelayed({
+                        AppLogger.log(TAG, "Torch pulse end: restoring wasEnabled=$wasEnabled")
+                        if (wasEnabled) {
+                            cam.cameraControl.enableTorch(true)
+                            torchState = true
+                        } else {
+                            cam.cameraControl.enableTorch(false)
+                            torchState = false
+                        }
+                        AppLogger.log(TAG, "Torch pulse end: state=${torchState ?: "unknown"}")
+                    }, durationMs.toLong())
+                } catch (e: Exception) {
+                    AppLogger.log(TAG, "Torch error: ${e.message}")
+                }
+            }
+        } else {
+            torchController.pulse(durationMs)
+        }
+        if (!isShutterSoundReleased) {
+            try {
+                shutterTone.startTone(ToneGenerator.TONE_PROP_BEEP2, 160)
             } catch (e: Exception) {
-                AppLogger.log(TAG, "Torch error: ${e.message}")
+                AppLogger.log(TAG, "Alert tone error: ${e.message}")
             }
         }
     }
 
     fun blinkTorch(pulses: Int = 3, onMs: Long = 120, offMs: Long = 120) {
-        val cam = camera ?: run {
-            AppLogger.log(TAG, "Torch skipped: camera not ready")
-            return
-        }
-        val info = cam.cameraInfo
-        if (!info.hasFlashUnit()) {
-            AppLogger.log(TAG, "Torch unavailable on this device")
-            return
-        }
-        if (!torchBlinking.compareAndSet(false, true)) {
-            AppLogger.log(TAG, "Torch blink skipped: already blinking")
-            return
-        }
-        mainHandler.post {
-            val wasEnabled = torchState == true
-            val totalSteps = (pulses.coerceAtLeast(1) * 2)
-            var step = 0
-            val runner = object : Runnable {
-                override fun run() {
-                    if (step >= totalSteps) {
-                        try {
-                            cam.cameraControl.enableTorch(wasEnabled)
-                            torchState = wasEnabled
-                        } catch (e: Exception) {
-                            AppLogger.log(TAG, "Torch restore error: ${e.message}")
-                        } finally {
-                            torchBlinking.set(false)
-                        }
-                        return
-                    }
-                    val enable = step % 2 == 0
-                    try {
-                        cam.cameraControl.enableTorch(enable)
-                        torchState = enable
-                    } catch (e: Exception) {
-                        AppLogger.log(TAG, "Torch blink error: ${e.message}")
-                    }
-                    val delay = if (enable) onMs else offMs
-                    step += 1
-                    mainHandler.postDelayed(this, delay)
-                }
+        if (canUseCameraTorch()) {
+            val cam = camera ?: return
+            AppLogger.log(TAG, "Torch blink requested (pulses=$pulses onMs=$onMs offMs=$offMs)")
+            if (!torchBlinking.compareAndSet(false, true)) {
+                AppLogger.log(TAG, "Torch blink skipped: already blinking")
+                return
             }
-            torchBlinkRunnable = runner
-            runner.run()
+            mainHandler.post {
+                val wasEnabled = torchState == true
+                AppLogger.log(TAG, "Torch blink start: wasEnabled=$wasEnabled currentState=${torchState ?: "unknown"}")
+                val totalSteps = (pulses.coerceAtLeast(1) * 2)
+                var step = 0
+                val runner = object : Runnable {
+                    override fun run() {
+                        if (step >= totalSteps) {
+                            try {
+                                cam.cameraControl.enableTorch(wasEnabled)
+                                torchState = wasEnabled
+                                AppLogger.log(TAG, "Torch blink restore: state=${torchState ?: "unknown"}")
+                            } catch (e: Exception) {
+                                AppLogger.log(TAG, "Torch restore error: ${e.message}")
+                            } finally {
+                                torchBlinking.set(false)
+                            }
+                            return
+                        }
+                        val enable = step % 2 == 0
+                        try {
+                            cam.cameraControl.enableTorch(enable)
+                            torchState = enable
+                            AppLogger.log(TAG, "Torch blink step=$step enable=$enable")
+                        } catch (e: Exception) {
+                            AppLogger.log(TAG, "Torch blink error: ${e.message}")
+                        }
+                        val delay = if (enable) onMs else offMs
+                        step += 1
+                        mainHandler.postDelayed(this, delay)
+                    }
+                }
+                torchBlinkRunnable = runner
+                runner.run()
+            }
+        } else {
+            torchController.blink(pulses, onMs, offMs)
         }
     }
 
     private fun cancelTorchBlink(reason: String) {
-        if (!torchBlinking.compareAndSet(true, false)) {
-            return
-        }
-        mainHandler.post {
-            torchBlinkRunnable?.let { mainHandler.removeCallbacks(it) }
-            torchBlinkRunnable = null
-            try {
-                camera?.cameraControl?.enableTorch(false)
-                torchState = false
-            } catch (e: Exception) {
-                AppLogger.log(TAG, "Torch cancel error ($reason): ${e.message}")
+        if (torchBlinking.compareAndSet(true, false)) {
+            mainHandler.post {
+                torchBlinkRunnable?.let { mainHandler.removeCallbacks(it) }
+                torchBlinkRunnable = null
+                try {
+                    camera?.cameraControl?.enableTorch(false)
+                    torchState = false
+                } catch (e: Exception) {
+                    AppLogger.log(TAG, "Torch cancel error ($reason): ${e.message}")
+                }
             }
+        } else if (!canUseCameraTorch()) {
+            torchController.cancelBlink(reason)
+            torchController.setEnabled(false)
         }
     }
 
@@ -403,25 +441,21 @@ class VideoRecorder(
     }
 
     fun setTorchEnabled(enabled: Boolean) {
-        val cam = camera ?: run {
-            AppLogger.log(TAG, "Torch skipped: camera not ready")
-            return
-        }
-        val info = cam.cameraInfo
-        if (!info.hasFlashUnit()) {
-            AppLogger.log(TAG, "Torch unavailable on this device")
-            return
-        }
-        val mainHandler = Handler(Looper.getMainLooper())
-        mainHandler.post {
-            if (torchState == enabled) return@post
-            try {
-                cam.cameraControl.enableTorch(enabled)
-                torchState = enabled
-                AppLogger.log(TAG, "Torch ${if (enabled) "ON" else "OFF"}")
-            } catch (e: Exception) {
-                AppLogger.log(TAG, "Torch error: ${e.message}")
+        if (canUseCameraTorch()) {
+            val cam = camera ?: return
+            AppLogger.log(TAG, "Torch set requested: enabled=$enabled")
+            mainHandler.post {
+                if (torchState == enabled) return@post
+                try {
+                    cam.cameraControl.enableTorch(enabled)
+                    torchState = enabled
+                    AppLogger.log(TAG, "Torch ${if (enabled) "ON" else "OFF"}")
+                } catch (e: Exception) {
+                    AppLogger.log(TAG, "Torch error: ${e.message}")
+                }
             }
+        } else {
+            torchController.setEnabled(enabled)
         }
     }
 
@@ -731,6 +765,19 @@ class VideoRecorder(
     }
 
     fun restartSession() {
+        val now = SystemClock.elapsedRealtime()
+        if (now < torchPulseUntilMs) {
+            val delayMs = (torchPulseUntilMs - now).coerceAtLeast(50L)
+            if (!restartPending) {
+                restartPending = true
+                AppLogger.log(TAG, "Restart session delayed for torch pulse (${delayMs}ms)")
+                mainHandler.postDelayed({
+                    restartPending = false
+                    restartSession()
+                }, delayMs)
+            }
+            return
+        }
         AppLogger.log(TAG, "Restarting camera session...")
         try {
             stopCamera()
