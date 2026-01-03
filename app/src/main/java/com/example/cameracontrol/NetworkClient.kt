@@ -53,7 +53,7 @@ object NetworkClient {
             return
         }
         isConnecting = true
-        AppLogger.log(TAG, "Opening WS (Room: ${currentRoomId ?: "Default"})...")
+        AppLogger.log(TAG, "Opening WS (Room: ${currentRoomId ?: "Default"}, Url: $WS_URL)...")
 
         val request = Request.Builder()
             .url(WS_URL)
@@ -63,7 +63,7 @@ object NetworkClient {
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                AppLogger.log(TAG, "WS Connected")
+                AppLogger.log(TAG, "WS Connected: ${response.code} ${response.message}")
                 _connectionStatus.value = true
                 isConnecting = false
                 handler.removeCallbacksAndMessages(null)
@@ -87,18 +87,21 @@ object NetworkClient {
                         val messageObj = json.optJSONObject("message")
                         if (messageObj != null) {
                              val action = messageObj.optString("action")
-                             if (action == "capture") {
+                            if (action == "capture") {
                                 _messageFlash.tryEmit(Unit) // Trigger UI flash only on capture requests
                                 AppLogger.log(TAG, "CAPTURE SIGNAL RECEIVED!")
                                 val timestamp = messageObj.optString("timestamp", "").ifBlank { null }
                                 BufferManager.triggerUpload(timestamp)
+                            } else {
+                                AppLogger.log(TAG, "WS message action ignored: $action")
                             }
                         } else {
                             // Message might be a string or int (like a ping timestamp inside a non-standard msg)
                             // Just ignore for now
+                            AppLogger.log(TAG, "WS message without JSON payload: $text")
                         }
                     } else {
-                        // Other messages
+                        AppLogger.log(TAG, "WS message without 'message' field: $text")
                     }
                 } catch (e: Exception) {
                     // Only log real errors, not parsing pings
@@ -109,12 +112,13 @@ object NetworkClient {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                AppLogger.log(TAG, "WS Failure: ${t.message}")
+                val responseInfo = if (response != null) "${response.code} ${response.message}" else "no response"
+                AppLogger.log(TAG, "WS Failure: ${t.message} (response: $responseInfo)")
                 handleDisconnect()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                AppLogger.log(TAG, "WS Closed: $reason")
+                AppLogger.log(TAG, "WS Closed: code=$code reason=$reason")
                 handleDisconnect()
             }
         })
@@ -151,10 +155,14 @@ object NetworkClient {
             }
 
             override fun onResponse(call: Call, response: Response) {
+                val bodyString = response.body?.string()
                 if (response.isSuccessful) {
-                    AppLogger.log(TAG, "Trigger Sent")
+                    AppLogger.log(TAG, "Trigger Sent: ${response.code}")
                 } else {
                     AppLogger.log(TAG, "Trigger Error: ${response.code}")
+                }
+                if (!bodyString.isNullOrBlank()) {
+                    AppLogger.log(TAG, "Trigger Response Body: $bodyString")
                 }
                 response.close()
             }
@@ -200,8 +208,9 @@ object NetworkClient {
         }
         
         subscribeMsg.put("identifier", identifier.toString())
-        ws.send(subscribeMsg.toString())
-        AppLogger.log(TAG, "Subscribing to RecordingChannel (Room=${roomId ?: "Public"})...")
+        val payload = subscribeMsg.toString()
+        val sent = ws.send(payload)
+        AppLogger.log(TAG, "Subscribing to RecordingChannel (Room=${roomId ?: "Public"}). Sent=$sent Payload=$payload")
     }
 
     fun uploadFile(file: File, remoteFileName: String, timestamp: String?, room: String? = null, onComplete: () -> Unit) {
