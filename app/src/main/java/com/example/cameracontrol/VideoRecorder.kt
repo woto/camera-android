@@ -94,7 +94,7 @@ class VideoRecorder(
             return@Runnable
         }
         val safeRotation = safeDisplayRotation()
-        AppLogger.log(
+            AppLogger.log(
             TAG,
             "Apply rotation: pending=$rotation safeDisplayRotation=$safeRotation " +
                 "lastKnown=$lastKnownDisplayRotation lastPreview=$lastPreviewRotation " +

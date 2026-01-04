@@ -12,6 +12,7 @@ enum class AppLanguage(val code: String, val displayName: String) {
     KO("ko", "한국어"),
     ID("id", "Bahasa Indonesia"),
     PT("pt", "Português"),
+    PT_BR("pt-BR", "Português (Brasil)"),
     FR("fr", "Français"),
     IT("it", "Italiano"),
     JA("ja", "日本語"),
@@ -29,7 +30,8 @@ enum class AppLanguage(val code: String, val displayName: String) {
     companion object {
         fun fromCode(code: String?): AppLanguage? {
             if (code.isNullOrBlank()) return null
-            return values().firstOrNull { it.code == code.lowercase() }
+            val normalized = code.lowercase()
+            return values().firstOrNull { it.code.lowercase() == normalized }
         }
     }
 }
@@ -50,7 +52,11 @@ object AppStrings {
             "bn" -> AppLanguage.BN
             "ko" -> AppLanguage.KO
             "id", "in" -> AppLanguage.ID
-            "pt" -> AppLanguage.PT
+            "pt" -> if (locale.country.equals("BR", ignoreCase = true)) {
+                AppLanguage.PT_BR
+            } else {
+                AppLanguage.PT
+            }
             "fr" -> AppLanguage.FR
             "it" -> AppLanguage.IT
             "ja" -> AppLanguage.JA
@@ -245,6 +251,28 @@ object AppStrings {
             "alert_ws_disconnected" to "Tidak ada koneksi ke сервер."
         ),
         AppLanguage.PT to mapOf(
+            "welcome" to "Bem-vindo",
+            "intro_text" to "Grave momentos incríveis de vôlei com seu telefone. " +
+                "Para economizar bateria, a gravação pode continuar com a tela apagada. " +
+                "Pare a gravação ao terminar.",
+            "ok" to "OK",
+            "room_id_title" to "ID da sala",
+            "room_id_prompt" to "Digite o ID da sala para esta sessão:",
+            "permissions_required" to "Permissões necessárias!",
+            "camera_permissions_msg" to "Conceda permissões de câmera e áudio para continuar.",
+            "starting_camera" to "Iniciando serviço da câmera...",
+            "debug_logs" to "Logs de depuração:",
+            "simulate_save" to "Salvar gravação",
+            "zoom" to "Zoom",
+            "exit" to "Sair",
+            "privacy_disclaimer" to "Ao tocar em OK, você concorda com nossa",
+            "privacy_link" to "Política de Privacidade",
+            "language_label" to "Idioma",
+            "website_label" to "Site",
+            "alert_phone_flat" to "O telefone está deitado.",
+            "alert_ws_disconnected" to "Sem conexão com o servidor."
+        ),
+        AppLanguage.PT_BR to mapOf(
             "welcome" to "Bem-vindo",
             "intro_text" to "Grave momentos incríveis de vôlei com seu telefone. " +
                 "Para economizar bateria, a gravação pode continuar com a tela apagada. " +

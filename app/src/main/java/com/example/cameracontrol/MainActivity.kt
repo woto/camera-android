@@ -11,6 +11,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
@@ -196,6 +197,9 @@ fun IntroScreen(
     onNext: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
+    val localeParam = remember(language) { localeParamFor(language, Locale.getDefault()) }
+    val websiteUrl = remember(localeParam) { "https://volleycam.com?locale=$localeParam" }
+    val privacyUrl = remember(localeParam) { "https://volleycam.com/privacy?locale=$localeParam" }
 
     Column(
         modifier = Modifier
@@ -230,7 +234,7 @@ fun IntroScreen(
                 color = Color.Gray
             )
             TextButton(
-                onClick = { uriHandler.openUri("https://volleycam.com") },
+                onClick = { uriHandler.openUri(websiteUrl) },
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.height(30.dp)
             ) {
@@ -249,7 +253,7 @@ fun IntroScreen(
                 color = Color.Gray
             )
             TextButton(
-                onClick = { uriHandler.openUri("https://volleycam.com/privacy") },
+                onClick = { uriHandler.openUri(privacyUrl) },
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.height(30.dp)
             ) {
@@ -267,6 +271,44 @@ fun IntroScreen(
         ) {
             Text(AppStrings.get("ok", language))
         }
+    }
+}
+
+private fun localeParamFor(language: AppLanguage, locale: Locale): String {
+    return when (language) {
+        AppLanguage.AR -> "ar"
+        AppLanguage.DE -> "de"
+        AppLanguage.EN -> "en"
+        AppLanguage.ES -> "es"
+        AppLanguage.FR -> "fr"
+        AppLanguage.ID -> "id"
+        AppLanguage.IT -> "it"
+        AppLanguage.JA -> "ja"
+        AppLanguage.NL -> "nl"
+        AppLanguage.PL -> "pl"
+        AppLanguage.PT -> "pt"
+        AppLanguage.PT_BR -> "pt-BR"
+        AppLanguage.RU -> "ru"
+        AppLanguage.SR -> "sr"
+        AppLanguage.TR -> "tr"
+        AppLanguage.ZH -> "zh"
+        else -> "en"
+    }
+}
+
+private fun withLocaleParam(url: String, localeParam: String): String {
+    return try {
+        val uri = Uri.parse(url)
+        if (uri.getQueryParameter("locale") != null) {
+            url
+        } else {
+            uri.buildUpon()
+                .appendQueryParameter("locale", localeParam)
+                .build()
+                .toString()
+        }
+    } catch (e: Exception) {
+        url
     }
 }
 
@@ -331,6 +373,7 @@ fun CameraScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val uriHandler = LocalUriHandler.current
+    val localeParam = remember(language) { localeParamFor(language, Locale.getDefault()) }
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
 
     // Permission State
@@ -496,7 +539,9 @@ fun CameraScreen(
                 duration = SnackbarDuration.Short
             )
             if (result == SnackbarResult.ActionPerformed) {
-                status.eventUrl?.let { uriHandler.openUri(it) }
+                status.eventUrl
+                    ?.let { withLocaleParam(it, localeParam) }
+                    ?.let { uriHandler.openUri(it) }
             }
         }
     }
