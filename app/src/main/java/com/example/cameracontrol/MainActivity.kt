@@ -169,10 +169,6 @@ fun MainApp() {
     when (currentStep) {
         AppStep.INTRO -> IntroScreen(
             language = language,
-            onLanguageChange = { newLanguage ->
-                languageCode = newLanguage.code
-                prefs.edit { putString("app_language", newLanguage.code) }
-            },
             onNext = { currentStep = AppStep.ROOM_ID }
         )
         AppStep.ROOM_ID -> RoomIdScreen(
@@ -193,11 +189,10 @@ fun MainApp() {
 @Composable
 fun IntroScreen(
     language: AppLanguage,
-    onLanguageChange: (AppLanguage) -> Unit,
     onNext: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
-    val localeParam = remember(language) { localeParamFor(language, Locale.getDefault()) }
+    val localeParam = remember(language) { localeParamFor(language) }
     val websiteUrl = remember(localeParam) { "https://volleycam.com?locale=$localeParam" }
     val privacyUrl = remember(localeParam) { "https://volleycam.com/privacy?locale=$localeParam" }
 
@@ -274,7 +269,7 @@ fun IntroScreen(
     }
 }
 
-private fun localeParamFor(language: AppLanguage, locale: Locale): String {
+private fun localeParamFor(language: AppLanguage): String {
     return when (language) {
         AppLanguage.AR -> "ar"
         AppLanguage.DE -> "de"
@@ -373,7 +368,7 @@ fun CameraScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val uriHandler = LocalUriHandler.current
-    val localeParam = remember(language) { localeParamFor(language, Locale.getDefault()) }
+    val localeParam = remember(language) { localeParamFor(language) }
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
 
     // Permission State
