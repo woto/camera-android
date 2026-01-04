@@ -446,7 +446,7 @@ object AppStrings {
             "language_label" to "Язык",
             "website_label" to "Сайт",
             "alert_phone_flat" to "Телефон лежит плашмя.",
-            "alert_ws_disconnected" to "Соединение WebSocket потеряно."
+            "alert_ws_disconnected" to "Нет подключения к серверу."
         ),
         AppLanguage.DE to mapOf(
             "welcome" to "Willkommen",
