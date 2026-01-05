@@ -445,8 +445,14 @@ fun CameraScreen(
 
     // Permission State
     val hasPermissionsInitial = remember {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val cameraGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val audioGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val notificationsGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        cameraGranted && audioGranted && notificationsGranted
     }
     var hasPermissions by remember { mutableStateOf(hasPermissionsInitial) }
 
@@ -463,12 +469,14 @@ fun CameraScreen(
         BufferManager.initialize(context)
         AppLogger.log(TAG, "App Started. Checking Permissions...")
         if (!hasPermissions) {
-            launcher.launch(
-                arrayOf(
-                    Manifest.permission.CAMERA,
-                    Manifest.permission.RECORD_AUDIO
-                )
-            )
+            val permissions = buildList {
+                add(Manifest.permission.CAMERA)
+                add(Manifest.permission.RECORD_AUDIO)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+            launcher.launch(permissions.toTypedArray())
         }
     }
 
