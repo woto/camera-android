@@ -1,4 +1,4 @@
-# Google Play Data Safety Guide for Volley Cam
+# Google Play Data Safety Guide for VolleyCam
 
 Use this guide when filling out the "Data Safety" section in the Google Play Console.
 

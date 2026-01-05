@@ -80,9 +80,9 @@ object AppStrings {
             "intro_text" to "Record volleyball highlights with your phone. " +
                 "To save battery, recording can continue with the screen off. " +
                 "Stop recording when you are done.",
+            "intro_main" to "Use players' phones as cameras. The game is recorded continuously, " +
                 "and the best or controversial moments are saved with one tap and available " +
                 "for review and analysis from different angles.",
-            "intro_main" to "Use players' phones as cameras. The game is recorded continuously, " +
             "ok" to "OK",
             "consent_title" to "Before you start",
             "consent_body" to "This app records video and audio using the camera and microphone. " +
@@ -546,9 +546,9 @@ object AppStrings {
             "intro_text" to "Записывайте лучшие моменты волейбола на телефон. " +
                 "Для экономии батареи запись может идти при выключенном экране. " +
                 "Остановите запись после завершения.",
+            "intro_main" to "Используйте телефоны игроков как камеры. " +
                 "Игра записывается постоянно, а лучшие и спорные моменты сохраняются " +
                 "одним нажатием кнопки и доступны для просмотра и анализа с разных углов.",
-            "intro_main" to "Используйте телефоны игроков как камеры. " +
             "ok" to "ОК",
             "consent_title" to "Перед началом",
             "consent_body" to "Приложение записывает видео и аудио, используя камеру и микрофон. " +
