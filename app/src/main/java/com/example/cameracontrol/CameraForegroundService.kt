@@ -54,6 +54,12 @@ class CameraForegroundService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!hasNotificationPermission()) {
+            AppLogger.log(TAG, "Missing POST_NOTIFICATIONS permission, stopping service")
+            _foregroundState.value = false
+            stopSelf()
+            return
+        }
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         _foregroundState.value = true
@@ -87,6 +93,12 @@ class CameraForegroundService : LifecycleService() {
                 return START_NOT_STICKY
             }
             else -> {
+                if (!hasNotificationPermission()) {
+                    AppLogger.log(TAG, "Missing POST_NOTIFICATIONS permission, stopping service")
+                    _foregroundState.value = false
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startForeground(NOTIFICATION_ID, buildNotification())
                 _foregroundState.value = true
             }
@@ -179,6 +191,14 @@ class CameraForegroundService : LifecycleService() {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CameraControl::RecorderLock").apply {
             setReferenceCounted(false)
             acquire()
+        }
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
         }
     }
 }
