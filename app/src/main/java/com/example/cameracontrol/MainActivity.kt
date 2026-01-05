@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
 enum class AppStep {
     INTRO,
     ROOM_ID,
+    CONSENT,
     CAMERA
 }
 
@@ -161,6 +162,7 @@ fun MainApp() {
     
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
+    var hasConsent by rememberSaveable { mutableStateOf(prefs.getBoolean("recording_consent", false)) }
     val initialLanguage = remember {
         AppLanguage.fromCode(prefs.getString("app_language", null))
             ?: AppStrings.defaultLanguage(Locale.getDefault())
@@ -175,7 +177,15 @@ fun MainApp() {
         )
         AppStep.ROOM_ID -> RoomIdScreen(
             language = language,
-            onNext = { currentStep = AppStep.CAMERA }
+            onNext = { currentStep = if (hasConsent) AppStep.CAMERA else AppStep.CONSENT }
+        )
+        AppStep.CONSENT -> ConsentScreen(
+            language = language,
+            onAccept = {
+                prefs.edit { putBoolean("recording_consent", true) }
+                hasConsent = true
+                currentStep = AppStep.CAMERA
+            }
         )
         AppStep.CAMERA -> CameraScreen(
             language = language,
@@ -243,23 +253,6 @@ fun IntroScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = AppStrings.get("privacy_disclaimer", language),
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
-            TextButton(
-                onClick = { uriHandler.openUri(privacyUrl) },
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.height(30.dp)
-            ) {
-                Text(
-                    text = AppStrings.get("privacy_link", language),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
         }
 
         Button(
@@ -361,6 +354,75 @@ fun RoomIdScreen(
 }
 
 private fun String.isEnabled(): Boolean = this.isNotBlank()
+
+@Composable
+fun ConsentScreen(
+    language: AppLanguage,
+    onAccept: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+    val localeParam = remember(language) { localeParamFor(language) }
+    val privacyUrl = remember(localeParam) { "https://volleycam.com/privacy?locale=$localeParam" }
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = AppStrings.get("consent_title", language),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Text(
+            text = AppStrings.get("consent_body", language),
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = { checked = it }
+            )
+            Text(
+                text = AppStrings.get("consent_ack", language),
+                fontSize = 14.sp,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+
+        Button(
+            onClick = onAccept,
+            enabled = checked,
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
+            Text(AppStrings.get("consent_continue", language))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(
+            onClick = { uriHandler.openUri(privacyUrl) },
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Text(
+                text = AppStrings.get("privacy_link", language),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
 
 @Composable
 fun CameraScreen(
