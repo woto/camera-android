@@ -88,21 +88,21 @@ class VideoRecorder(
         val now = SystemClock.elapsedRealtime()
         if (now < torchPulseUntilMs) {
             val delayMs = (torchPulseUntilMs - now).coerceAtLeast(applyRotationChangeDelayMs)
-            AppLogger.log(TAG, "Rotation restart delayed for torch pulse (${delayMs}ms)")
+            // AppLogger.log(TAG, "Rotation restart delayed for torch pulse (${delayMs}ms)")
             pendingDisplayRotation = rotation
             rotationHandler.postDelayed(applyRotationChange, delayMs)
             return@Runnable
         }
         val safeRotation = safeDisplayRotation()
-            AppLogger.log(
-            TAG,
-            "Apply rotation: pending=$rotation safeDisplayRotation=$safeRotation " +
-                "lastKnown=$lastKnownDisplayRotation lastPreview=$lastPreviewRotation " +
-                "isStarting=$isStarting isRecording=$isRecording"
-        )
+            // AppLogger.log(
+            //     TAG,
+            //     "Apply rotation: pending=$rotation safeDisplayRotation=$safeRotation " +
+            //         "lastKnown=$lastKnownDisplayRotation lastPreview=$lastPreviewRotation " +
+            //         "isStarting=$isStarting isRecording=$isRecording"
+            // )
         if (lastKnownDisplayRotation == rotation) return@Runnable
         lastKnownDisplayRotation = rotation
-        AppLogger.log(TAG, "Rotation changed to $rotation. Restarting camera...")
+        // AppLogger.log(TAG, "Rotation changed to $rotation. Restarting camera...")
         try {
             stopCamera()
             startCamera(boundPreviewProvider)
@@ -168,21 +168,21 @@ class VideoRecorder(
                 } else {
                     safeRotation ?: lastPreviewRotation ?: rotation
                 }
-                AppLogger.log(
-                    TAG,
-                    "Orientation pick: lastKnownDisplayRotation=$lastKnownDisplayRotation " +
-                        "safeDisplayRotation=$safeRotation lastPreviewRotation=$lastPreviewRotation " +
-                        "sensorRotation=$sensorRotation screenOn=$effectiveScreenOn " +
-                        "rotation=$rotation previewRotation=$previewRotation"
-                )
+                // AppLogger.log(
+                //     TAG,
+                //     "Orientation pick: lastKnownDisplayRotation=$lastKnownDisplayRotation " +
+                //         "safeDisplayRotation=$safeRotation lastPreviewRotation=$lastPreviewRotation " +
+                //         "sensorRotation=$sensorRotation screenOn=$effectiveScreenOn " +
+                //         "rotation=$rotation previewRotation=$previewRotation"
+                // )
                 val targetSize = resolveTargetSize(rotation)
                 activeWidth = targetSize.width
                 activeHeight = targetSize.height
-                AppLogger.log(
-                    TAG,
-                    "Starting Camera with Resolution: ${activeWidth}x${activeHeight} " +
-                        "(rotation=$rotation previewRotation=$previewRotation)"
-                )
+                // AppLogger.log(
+                //     TAG,
+                //     "Starting Camera with Resolution: ${activeWidth}x${activeHeight} " +
+                //         "(rotation=$rotation previewRotation=$previewRotation)"
+                // )
 
                 val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
                     CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
@@ -192,14 +192,14 @@ class VideoRecorder(
                 } ?: 0
                 val needsLandscapeFlip = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
                 sessionRotationDegrees = baseRotation
-                AppLogger.log(
-                    TAG,
-                    "Orientation calc: baseRotation=$baseRotation needsLandscapeFlip=$needsLandscapeFlip " +
-                        "sessionRotationDegrees=$sessionRotationDegrees"
-                )
+                // AppLogger.log(
+                //     TAG,
+                //     "Orientation calc: baseRotation=$baseRotation needsLandscapeFlip=$needsLandscapeFlip " +
+                //         "sessionRotationDegrees=$sessionRotationDegrees"
+                // )
                 CircularBuffer.rotationDegrees = sessionRotationDegrees
                 CircularBuffer.clear()
-                AppLogger.log(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
+                // AppLogger.log(TAG, "Session rotation degrees=$sessionRotationDegrees (base=$baseRotation)")
 
                 // 1. UI Preview (Viewfinder) - only when screen is on
                 // Sync UI resolution with Recording resolution (1080p) to ensure stream compatibility
@@ -294,7 +294,7 @@ class VideoRecorder(
             lastPreviewRotation = rotation
             preview?.targetRotation = rotation
             encodingPreview?.targetRotation = rotation
-            AppLogger.log(TAG, "attachPreview() rotation=$rotation")
+            // AppLogger.log(TAG, "attachPreview() rotation=$rotation")
         }
     }
 
@@ -368,14 +368,14 @@ class VideoRecorder(
     fun blinkTorch(pulses: Int = 3, onMs: Long = 120, offMs: Long = 120) {
         if (canUseCameraTorch()) {
             val cam = camera ?: return
-            AppLogger.log(TAG, "Torch blink requested (pulses=$pulses onMs=$onMs offMs=$offMs)")
+            // AppLogger.log(TAG, "Torch blink requested (pulses=$pulses onMs=$onMs offMs=$offMs)")
             if (!torchBlinking.compareAndSet(false, true)) {
-                AppLogger.log(TAG, "Torch blink skipped: already blinking")
+                // AppLogger.log(TAG, "Torch blink skipped: already blinking")
                 return
             }
             mainHandler.post {
                 val wasEnabled = torchState == true
-                AppLogger.log(TAG, "Torch blink start: wasEnabled=$wasEnabled currentState=${torchState ?: "unknown"}")
+                // AppLogger.log(TAG, "Torch blink start: wasEnabled=$wasEnabled currentState=${torchState ?: "unknown"}")
                 val totalSteps = (pulses.coerceAtLeast(1) * 2)
                 var step = 0
                 val runner = object : Runnable {
@@ -384,7 +384,7 @@ class VideoRecorder(
                             try {
                                 cam.cameraControl.enableTorch(wasEnabled)
                                 torchState = wasEnabled
-                                AppLogger.log(TAG, "Torch blink restore: state=${torchState ?: "unknown"}")
+                                // AppLogger.log(TAG, "Torch blink restore: state=${torchState ?: "unknown"}")
                             } catch (e: Exception) {
                                 AppLogger.log(TAG, "Torch restore error: ${e.message}")
                             } finally {
@@ -396,9 +396,9 @@ class VideoRecorder(
                         try {
                             cam.cameraControl.enableTorch(enable)
                             torchState = enable
-                            AppLogger.log(TAG, "Torch blink step=$step enable=$enable")
+                            // AppLogger.log(TAG, "Torch blink step=$step enable=$enable")
                         } catch (e: Exception) {
-                            AppLogger.log(TAG, "Torch blink error: ${e.message}")
+                            // AppLogger.log(TAG, "Torch blink error: ${e.message}")
                         }
                         val delay = if (enable) onMs else offMs
                         step += 1
@@ -816,10 +816,10 @@ class VideoRecorder(
                 windowManager.defaultDisplay?.rotation
             } ?: displayManager.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.rotation
             lastSafeDisplayRotation = rotation
-            AppLogger.log(TAG, "safeDisplayRotation() -> $rotation")
+            // AppLogger.log(TAG, "safeDisplayRotation() -> $rotation")
             rotation
         } catch (_: Exception) {
-            AppLogger.log(TAG, "safeDisplayRotation() failed; using lastKnownDisplayRotation=$lastKnownDisplayRotation")
+            // AppLogger.log(TAG, "safeDisplayRotation() failed; using lastKnownDisplayRotation=$lastKnownDisplayRotation")
             lastKnownDisplayRotation
         }
     }
@@ -836,7 +836,7 @@ class VideoRecorder(
     private fun resolveTargetSize(rotation: Int): Size {
         val isPortrait = rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180
         val desired = if (isPortrait) Size(HEIGHT, WIDTH) else Size(WIDTH, HEIGHT)
-        AppLogger.log(TAG, "resolveTargetSize(): rotation=$rotation isPortrait=$isPortrait desired=${desired.width}x${desired.height}")
+        // AppLogger.log(TAG, "resolveTargetSize(): rotation=$rotation isPortrait=$isPortrait desired=${desired.width}x${desired.height}")
         val cameraInfo = cameraProvider?.availableCameraInfos?.firstOrNull {
             CameraSelector.DEFAULT_BACK_CAMERA.filter(listOf(it)).isNotEmpty()
         } ?: return desired
@@ -847,17 +847,17 @@ class VideoRecorder(
         val desiredRatio = desired.width.toFloat() / desired.height.toFloat()
         val exact = sizes.firstOrNull { it.width == desired.width && it.height == desired.height }
         if (exact != null) {
-            AppLogger.log(TAG, "Target size exact match: ${desired.width}x${desired.height}")
+            // AppLogger.log(TAG, "Target size exact match: ${desired.width}x${desired.height}")
             return desired
         }
         val best = sizes
             .filter { abs(it.width.toFloat() / it.height.toFloat() - desiredRatio) < 0.01f }
             .maxByOrNull { it.width * it.height }
         if (best != null) {
-            AppLogger.log(TAG, "Target size best match: ${best.width}x${best.height}")
+            // AppLogger.log(TAG, "Target size best match: ${best.width}x${best.height}")
             return Size(best.width, best.height)
         }
-        AppLogger.log(TAG, "Target size fallback: ${WIDTH}x${HEIGHT}")
+        // AppLogger.log(TAG, "Target size fallback: ${WIDTH}x${HEIGHT}")
         return Size(WIDTH, HEIGHT)
     }
 
@@ -876,14 +876,14 @@ class VideoRecorder(
 
                 lastSensorOrientationDegrees = orientation
                 lastSensorDisplayRotation = displayRotation
-                AppLogger.log(TAG, "Sensor orientation=$orientation -> displayRotation=$displayRotation")
+                // AppLogger.log(TAG, "Sensor orientation=$orientation -> displayRotation=$displayRotation")
                 val safeRotation = safeDisplayRotation()
                 if (safeRotation != null && safeRotation != displayRotation) {
-                    AppLogger.log(
-                        TAG,
-                        "Rotation mismatch: sensor=$displayRotation safeDisplayRotation=$safeRotation " +
-                            "lastKnown=$lastKnownDisplayRotation"
-                    )
+                    // AppLogger.log(
+                    //     TAG,
+                    //     "Rotation mismatch: sensor=$displayRotation safeDisplayRotation=$safeRotation " +
+                    //         "lastKnown=$lastKnownDisplayRotation"
+                    // )
                 }
                 if (lastKnownDisplayRotation == displayRotation && pendingDisplayRotation == null) return
                 pendingDisplayRotation = displayRotation

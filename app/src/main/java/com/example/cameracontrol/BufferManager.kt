@@ -50,7 +50,7 @@ object BufferManager {
         // 1. Get Snapshot from RAM
         val snapshot = CircularBuffer.getSnapshot()
         val frames = snapshot.frames
-        AppLogger.log(TAG, "Snapshot: frames=${frames.size} rot=${snapshot.rotation}")
+        // AppLogger.log(TAG, "Snapshot: frames=${frames.size} rot=${snapshot.rotation}")
         
         if (frames.isEmpty()) {
             AppLogger.w(TAG, "Buffer is empty, nothing to save.")
@@ -96,7 +96,7 @@ object BufferManager {
             if (videoFormat != null) {
                 videoTrackIndex = muxer.addTrack(videoFormat)
                 muxer.setOrientationHint(snapshot.rotation)
-                AppLogger.log(TAG, "Video track added. rotation=${snapshot.rotation} format=$videoFormat")
+                // AppLogger.log(TAG, "Video track added. rotation=${snapshot.rotation} format=$videoFormat")
             } else {
                 AppLogger.e(TAG, "Missing Video Format!")
                 return

@@ -60,15 +60,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.composed
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
@@ -370,6 +372,7 @@ fun CameraScreen(
     val uriHandler = LocalUriHandler.current
     val localeParam = remember(language) { localeParamFor(language) }
     val prefs = remember { context.getSharedPreferences("cameracontrol_prefs", Context.MODE_PRIVATE) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // Permission State
     val hasPermissionsInitial = remember {
@@ -419,6 +422,24 @@ fun CameraScreen(
     val alertIntervalMs = 5000L
     var flatAlertJob by remember { mutableStateOf<Job?>(null) }
     var wsAlertJob by remember { mutableStateOf<Job?>(null) }
+
+    DisposableEffect(lifecycleOwner, hasPermissions) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    if (hasPermissions) {
+                        val roomId = prefs.getString("room_id", null)
+                        NetworkClient.connectWebSocket(roomId)
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     fun triggerAlert(message: String, useCooldown: Boolean = true) {
         val now = SystemClock.elapsedRealtime()

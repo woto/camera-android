@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.random.Random
 object NetworkClient {
     private const val TAG = "NetworkClient"
     private val client = OkHttpClient.Builder()
@@ -22,8 +23,11 @@ object NetworkClient {
 
     private var webSocket: WebSocket? = null
     private var isConnecting = false
+    private var allowReconnect = true
     private val handler = Handler(Looper.getMainLooper())
     private const val RECONNECT_DELAY_MS = 3000L
+    private const val PING_MIN_DELAY_MS = 30_000L
+    private const val PING_MAX_DELAY_MS = 60_000L
 
     // REPLACE THIS WITH YOUR COMPUTER'S LOCAL IP if testing on phone
     // 10.0.2.2 is "localhost" for Android Emulator
@@ -38,6 +42,7 @@ object NetworkClient {
     val uploadStatus = _uploadStatus.asSharedFlow()
 
     private var currentRoomId: String? = null
+    private var pingRunnable: Runnable? = null
     
     // Public getter for current room ID
     fun getCurrentRoomId(): String? = currentRoomId
@@ -47,6 +52,7 @@ object NetworkClient {
         if (roomId != null) {
             currentRoomId = roomId
         }
+        allowReconnect = true
         
         if (isConnecting || _connectionStatus.value) {
             AppLogger.log(TAG, "WS already connecting/connected")
@@ -68,6 +74,8 @@ object NetworkClient {
                 isConnecting = false
                 handler.removeCallbacksAndMessages(null)
                 subscribeToChannel(webSocket, currentRoomId)
+                AppLogger.log(TAG, "WS subscribe sent; awaiting confirm (Room=${currentRoomId ?: "Public"})")
+                startPingLoop(webSocket, currentRoomId)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -81,6 +89,15 @@ object NetworkClient {
                     }
                     else if (type == "welcome") {
                         AppLogger.log(TAG, "WS Welcome")
+                    }
+                    else if (type == "confirm_subscription") {
+                        AppLogger.log(TAG, "WS Subscription confirmed (Room=${currentRoomId ?: "Public"})")
+                    }
+                    else if (type == "reject_subscription") {
+                        AppLogger.log(TAG, "WS Subscription rejected (Room=${currentRoomId ?: "Public"})")
+                    }
+                    else if (type == "disconnect") {
+                        AppLogger.log(TAG, "WS Server disconnect: $text")
                     }
                     else if (json.has("message")) {
                         // Check if message is a JSON object (data payload)
@@ -173,7 +190,10 @@ object NetworkClient {
         _connectionStatus.value = false
         isConnecting = false
         webSocket = null
-        scheduleReconnect()
+        stopPingLoop()
+        if (allowReconnect) {
+            scheduleReconnect()
+        }
     }
 
     private fun scheduleReconnect() {
@@ -188,12 +208,17 @@ object NetworkClient {
     @Synchronized
     fun disconnectWebSocket() {
         AppLogger.log(TAG, "Disconnecting WS...")
+        allowReconnect = false
         handler.removeCallbacksAndMessages(null)
-        webSocket?.close(1000, "Service stopped")
+        webSocket?.let { ws ->
+            sendUnsubscribe(ws, currentRoomId)
+            ws.close(1000, "Service stopped")
+        }
         webSocket = null
         _connectionStatus.value = false
         isConnecting = false
         currentRoomId = null
+        stopPingLoop()
     }
 
     private fun subscribeToChannel(ws: WebSocket, roomId: String?) {
@@ -201,16 +226,61 @@ object NetworkClient {
         subscribeMsg.put("command", "subscribe")
         
         // Construct Identifier: {"channel":"RecordingChannel", "room":"<id>"}
+        subscribeMsg.put("identifier", buildIdentifier(roomId))
+        val payload = subscribeMsg.toString()
+        val sent = ws.send(payload)
+        AppLogger.log(TAG, "Subscribing to RecordingChannel (Room=${roomId ?: "Public"}). Sent=$sent Payload=$payload")
+    }
+
+    private fun sendUnsubscribe(ws: WebSocket, roomId: String?) {
+        val unsubscribeMsg = JSONObject()
+        unsubscribeMsg.put("command", "unsubscribe")
+        unsubscribeMsg.put("identifier", buildIdentifier(roomId))
+        val payload = unsubscribeMsg.toString()
+        val sent = ws.send(payload)
+        AppLogger.log(TAG, "Unsubscribing from RecordingChannel (Room=${roomId ?: "Public"}). Sent=$sent Payload=$payload")
+    }
+
+    private fun startPingLoop(ws: WebSocket, roomId: String?) {
+        stopPingLoop()
+        AppLogger.log(TAG, "WS Ping loop started (Room=${roomId ?: "Public"}, interval=30-60s)")
+        sendPing(ws, roomId)
+        val runnable = object : Runnable {
+            override fun run() {
+                if (!_connectionStatus.value) return
+                sendPing(ws, roomId)
+                val delayMs = Random.nextLong(PING_MIN_DELAY_MS, PING_MAX_DELAY_MS + 1)
+                handler.postDelayed(this, delayMs)
+            }
+        }
+        pingRunnable = runnable
+        val delayMs = Random.nextLong(PING_MIN_DELAY_MS, PING_MAX_DELAY_MS + 1)
+        handler.postDelayed(runnable, delayMs)
+    }
+
+    private fun stopPingLoop() {
+        pingRunnable?.let { handler.removeCallbacks(it) }
+        pingRunnable = null
+    }
+
+    private fun sendPing(ws: WebSocket, roomId: String?) {
+        val pingMsg = JSONObject()
+        pingMsg.put("command", "message")
+        pingMsg.put("identifier", buildIdentifier(roomId))
+        val data = JSONObject().put("action", "ping")
+        pingMsg.put("data", data.toString())
+        val payload = pingMsg.toString()
+        val sent = ws.send(payload)
+        AppLogger.log(TAG, "WS Ping (Room=${roomId ?: "Public"}). Sent=$sent Payload=$payload")
+    }
+
+    private fun buildIdentifier(roomId: String?): String {
         val identifier = JSONObject()
         identifier.put("channel", "RecordingChannel")
         if (!roomId.isNullOrBlank()) {
             identifier.put("room", roomId)
         }
-        
-        subscribeMsg.put("identifier", identifier.toString())
-        val payload = subscribeMsg.toString()
-        val sent = ws.send(payload)
-        AppLogger.log(TAG, "Subscribing to RecordingChannel (Room=${roomId ?: "Public"}). Sent=$sent Payload=$payload")
+        return identifier.toString()
     }
 
     fun uploadFile(file: File, remoteFileName: String, timestamp: String?, room: String? = null, onComplete: () -> Unit) {
