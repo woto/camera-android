@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.Locale
 
 class CameraForegroundService : LifecycleService() {
     companion object {
@@ -158,6 +159,7 @@ class CameraForegroundService : LifecycleService() {
     }
 
     private fun buildNotification(): Notification {
+        val language = AppStrings.defaultLanguage(Locale.getDefault())
         val stopIntent = Intent(this, CameraForegroundService::class.java).apply {
             action = ACTION_STOP
         }
@@ -177,9 +179,9 @@ class CameraForegroundService : LifecycleService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setContentTitle("Camera recording")
-            .setContentText("Recording continues with screen off")
+            .setSmallIcon(R.drawable.ic_volleyball)
+            .setContentTitle(AppStrings.get("notification_title", language))
+            .setContentText(AppStrings.get("notification_text", language))
             .setContentIntent(pendingOpen)
             .setOngoing(true)
             .addAction(0, "Stop", stopPendingIntent)
