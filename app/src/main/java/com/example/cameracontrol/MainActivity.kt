@@ -231,6 +231,13 @@ fun IntroScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
+        Text(
+            text = AppStrings.get("intro_main", language),
+            fontSize = 14.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 20.dp)
+        )
+
         Column(
             modifier = Modifier.padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally

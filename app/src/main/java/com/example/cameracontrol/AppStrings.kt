@@ -80,6 +80,9 @@ object AppStrings {
             "intro_text" to "Record volleyball highlights with your phone. " +
                 "To save battery, recording can continue with the screen off. " +
                 "Stop recording when you are done.",
+            "intro_main" to "Use players' phones as cameras. The game is recorded continuously, " +
+                "and the best or controversial moments are saved with one tap and available " +
+                "for review and analysis from different angles.",
             "ok" to "OK",
             "consent_title" to "Before you start",
             "consent_body" to "This app records video and audio using the camera and microphone. " +
@@ -105,6 +108,7 @@ object AppStrings {
         AppLanguage.ZH to mapOf(
             "welcome" to "欢迎",
             "intro_text" to "用手机记录精彩的排球时刻。为节省电量，" +
+            "intro_main" to "使用球员的手机作为摄像机。比赛将持续录制，精彩或有争议的瞬间可一键保存，并可从不同角度观看和分析。",
                 "即使屏幕关闭也可继续录制。使用完请停止录制。",
             "ok" to "确定",
             "consent_title" to "开始前",
@@ -130,6 +134,7 @@ object AppStrings {
         AppLanguage.ES to mapOf(
             "welcome" to "Bienvenido",
             "intro_text" to "Graba momentos destacados de voleibol con tu teléfono. " +
+            "intro_main" to "Usa los teléfonos de los jugadores como cámaras. El partido se graba continuamente, y los mejores o más discutidos momentos se guardan con un toque y están disponibles para revisar y analizar desde distintos ángulos.",
                 "Para ahorrar batería, la grabación puede continuar con la pantalla apagada. " +
                 "Detén la grabación cuando termines.",
             "ok" to "OK",
@@ -156,6 +161,7 @@ object AppStrings {
         AppLanguage.AR to mapOf(
             "welcome" to "مرحبًا",
             "intro_text" to "سجّل لحظات جميلة لكرة الطائرة بهاتفك. " +
+            "intro_main" to "استخدم هواتف اللاعبين ككاميرات. تُسجَّل المباراة باستمرار، ويتم حفظ أفضل أو أكثر اللحظات جدلاً بضغطة واحدة وتتاح للمراجعة والتحليل من زوايا مختلفة.",
                 "لتوفير البطارية، يمكن أن يستمر التسجيل والشاشة مطفأة. " +
                 "أوقف التسجيل عند الانتهاء.",
             "ok" to "حسنًا",
@@ -182,6 +188,7 @@ object AppStrings {
         AppLanguage.HI to mapOf(
             "welcome" to "स्वागत है",
             "intro_text" to "अपने फोन से वॉलीबॉल के बेहतरीन पल रिकॉर्ड करें। " +
+            "intro_main" to "खिलाड़ियों के फ़ोन को कैमरों के रूप में इस्तेमाल करें। खेल लगातार रिकॉर्ड होता है, और बेहतरीन या विवादित पल एक टैप से सेव होकर अलग-अलग कोणों से देखने और विश्लेषण के लिए उपलब्ध होते हैं।",
                 "बैटरी बचाने के लिए स्क्रीन बंद होने पर भी रिकॉर्डिंग चल सकती है। " +
                 "काम खत्म होने पर रिकॉर्डिंग रोक दें।",
             "ok" to "ठीक है",
@@ -208,6 +215,7 @@ object AppStrings {
         AppLanguage.BN to mapOf(
             "welcome" to "স্বাগতম",
             "intro_text" to "আপনার ফোন দিয়ে ভলিবলের সুন্দর মুহূর্তগুলো রেকর্ড করুন। " +
+            "intro_main" to "খেলোয়াড়দের ফোনকে ক্যামেরা হিসেবে ব্যবহার করুন। খেলা ধারাবাহিকভাবে রেকর্ড হয়, আর সেরা বা বিতর্কিত মুহূর্তগুলো এক ট্যাপে সংরক্ষণ হয়ে বিভিন্ন কোণ থেকে দেখা ও বিশ্লেষণের জন্য উপলব্ধ থাকে।",
                 "ব্যাটারি বাঁচাতে স্ক্রিন বন্ধ থাকলেও রেকর্ডিং চলতে পারে। " +
                 "কাজ শেষ হলে রেকর্ডিং বন্ধ করুন।",
             "ok" to "ঠিক আছে",
@@ -234,6 +242,7 @@ object AppStrings {
         AppLanguage.KO to mapOf(
             "welcome" to "환영합니다",
             "intro_text" to "휴대폰으로 배구의 멋진 순간을 녹화하세요. " +
+            "intro_main" to "선수들의 휴대폰을 카메라로 사용하세요. 경기는 계속 녹화되며, 최고의 순간이나 논란이 되는 순간을 한 번의 터치로 저장해 다양한 각도에서 확인하고 분석할 수 있습니다.",
                 "배터리 절약을 위해 화면이 꺼진 상태에서도 녹화가 계속될 수 있습니다. " +
                 "사용 후 녹화를 중지하세요.",
             "ok" to "확인",
@@ -260,6 +269,7 @@ object AppStrings {
         AppLanguage.ID to mapOf(
             "welcome" to "Selamat datang",
             "intro_text" to "Rekam momen voli yang indah dengan ponsel Anda. " +
+            "intro_main" to "Gunakan ponsel pemain sebagai kamera. Pertandingan direkam terus-menerus, dan momen terbaik atau kontroversial dapat disimpan dengan satu ketukan serta tersedia untuk ditinjau dan dianalisis dari berbagai sudut.",
                 "Untuk menghemat baterai, perekaman dapat berlanjut saat layar mati. " +
                 "Hentikan perekaman setelah selesai.",
             "ok" to "OK",
@@ -286,6 +296,7 @@ object AppStrings {
         AppLanguage.PT to mapOf(
             "welcome" to "Bem-vindo",
             "intro_text" to "Grave momentos incríveis de vôlei com seu telefone. " +
+            "intro_main" to "Use os telefones dos jogadores como câmeras. O jogo é gravado continuamente, e os melhores ou mais polêmicos momentos são salvos com um toque e ficam disponíveis para revisão e análise de diferentes ângulos.",
                 "Para economizar bateria, a gravação pode continuar com a tela apagada. " +
                 "Pare a gravação ao terminar.",
             "ok" to "OK",
@@ -312,6 +323,7 @@ object AppStrings {
         AppLanguage.PT_BR to mapOf(
             "welcome" to "Bem-vindo",
             "intro_text" to "Grave momentos incríveis de vôlei com seu telefone. " +
+            "intro_main" to "Use os celulares dos jogadores como câmeras. O jogo é gravado continuamente, e os melhores ou mais polêmicos momentos são salvos com um toque e ficam disponíveis para revisão e análise de diferentes ângulos.",
                 "Para economizar bateria, a gravação pode continuar com a tela apagada. " +
                 "Pare a gravação ao terminar.",
             "ok" to "OK",
@@ -338,6 +350,7 @@ object AppStrings {
         AppLanguage.FR to mapOf(
             "welcome" to "Bienvenue",
             "intro_text" to "Enregistrez de beaux moments de volley avec votre téléphone. " +
+            "intro_main" to "Utilisez les téléphones des joueurs comme caméras. Le match est enregistré en continu, et les meilleurs ou plus discutés moments sont sauvegardés d’un tap et disponibles pour visionnage et analyse sous différents angles.",
                 "Pour économiser la batterie, l'enregistrement peut continuer écran éteint. " +
                 "Arrêtez l'enregistrement une fois terminé.",
             "ok" to "OK",
@@ -364,6 +377,7 @@ object AppStrings {
         AppLanguage.IT to mapOf(
             "welcome" to "Benvenuto",
             "intro_text" to "Registra i momenti più belli della pallavolo con il tuo telefono. " +
+            "intro_main" to "Usa i telefoni dei giocatori come telecamere. La partita viene registrata continuamente e i momenti migliori o più discussi si salvano con un tocco e sono disponibili per la revisione e l’analisi da diverse angolazioni.",
                 "Per risparmiare batteria, la registrazione può continuare con lo schermo spento. " +
                 "Interrompi la registrazione quando hai finito.",
             "ok" to "OK",
@@ -390,6 +404,7 @@ object AppStrings {
         AppLanguage.JA to mapOf(
             "welcome" to "ようこそ",
             "intro_text" to "スマートフォンでバレーボールの名場面を録画します。" +
+            "intro_main" to "選手のスマホをカメラとして使います。試合は常時録画され、最高の瞬間や議論のある場面はワンタップで保存され、さまざまな角度から確認・分析できます。",
                 "電池節約のため、画面が消えても録画を続けられます。" +
                 "使用後は録画を停止してください。",
             "ok" to "OK",
@@ -416,6 +431,7 @@ object AppStrings {
         AppLanguage.TR to mapOf(
             "welcome" to "Hoş geldiniz",
             "intro_text" to "Telefonunuzla voleybolun güzel anlarını kaydedin. " +
+            "intro_main" to "Oyuncuların telefonlarını kamera olarak kullanın. Maç sürekli kaydedilir; en iyi veya tartışmalı anlar tek dokunuşla kaydedilir ve farklı açılardan izleme ve analiz için kullanılabilir.",
                 "Pil tasarrufu için ekran kapalıyken de kayıt devam edebilir. " +
                 "İşiniz bitince kaydı durdurun.",
             "ok" to "Tamam",
@@ -442,6 +458,7 @@ object AppStrings {
         AppLanguage.VI to mapOf(
             "welcome" to "Chào mừng",
             "intro_text" to "Ghi lại những khoảnh khắc bóng chuyền đẹp bằng điện thoại của bạn. " +
+            "intro_main" to "Sử dụng điện thoại của người chơi làm camera. Trận đấu được ghi liên tục, và những khoảnh khắc hay hoặc gây tranh cãi được lưu chỉ với một chạm, có thể xem và phân tích từ nhiều góc độ.",
                 "Để tiết kiệm pin, việc ghi có thể tiếp tục khi màn hình tắt. " +
                 "Hãy dừng ghi khi bạn dùng xong.",
             "ok" to "OK",
@@ -468,6 +485,7 @@ object AppStrings {
         AppLanguage.TH to mapOf(
             "welcome" to "ยินดีต้อนรับ",
             "intro_text" to "บันทึกช่วงเวลาวอลเลย์บอลที่สวยงามด้วยโทรศัพท์ของคุณ " +
+            "intro_main" to "ใช้โทรศัพท์ของผู้เล่นเป็นกล้อง เกมจะถูกบันทึกต่อเนื่อง และช่วงเวลาที่ดีที่สุดหรือมีข้อโต้แย้งจะถูกบันทึกด้วยการแตะครั้งเดียว พร้อมให้รับชมและวิเคราะห์จากหลายมุมมอง.",
                 "เพื่อประหยัดแบตเตอรี่ การบันทึกสามารถทำต่อได้เมื่อหน้าจอดับ " +
                 "หยุดบันทึกเมื่อใช้งานเสร็จแล้ว",
             "ok" to "ตกลง",
@@ -496,6 +514,9 @@ object AppStrings {
             "intro_text" to "Записывайте лучшие моменты волейбола на телефон. " +
                 "Для экономии батареи запись может идти при выключенном экране. " +
                 "Остановите запись после завершения.",
+            "intro_main" to "Используйте телефоны игроков как камеры. " +
+                "Игра записывается постоянно, а лучшие и спорные моменты сохраняются " +
+                "одним нажатием кнопки и доступны для просмотра и анализа с разных углов.",
             "ok" to "ОК",
             "consent_title" to "Перед началом",
             "consent_body" to "Приложение записывает видео и аудио, используя камеру и микрофон. " +
@@ -521,6 +542,7 @@ object AppStrings {
         AppLanguage.DE to mapOf(
             "welcome" to "Willkommen",
             "intro_text" to "Nimm schöne Volleyball-Momente mit deinem Handy auf. " +
+            "intro_main" to "Nutze die Handys der Spieler als Kameras. Das Spiel wird kontinuierlich aufgezeichnet, und die besten oder umstrittenen Momente werden mit einem Tipp gespeichert und sind zur Ansicht und Analyse aus verschiedenen Blickwinkeln verfügbar.",
                 "Um Akku zu sparen, kann die Aufnahme bei ausgeschaltetem Bildschirm weiterlaufen. " +
                 "Beende die Aufnahme, wenn du fertig bist.",
             "ok" to "OK",
@@ -547,6 +569,7 @@ object AppStrings {
         AppLanguage.PL to mapOf(
             "welcome" to "Witamy",
             "intro_text" to "Nagrywaj najlepsze momenty siatkówki swoim telefonem. " +
+            "intro_main" to "Użyj telefonów zawodników jako kamer. Mecz jest nagrywany na bieżąco, a najlepsze lub najbardziej dyskusyjne momenty są zapisywane jednym dotknięciem i dostępne do oglądania oraz analizy z różnych ujęć.",
                 "Aby oszczędzać baterię, nagrywanie może trwać przy wyłączonym ekranie. " +
                 "Zatrzymaj nagrywanie po zakończeniu.",
             "ok" to "OK",
@@ -573,6 +596,7 @@ object AppStrings {
         AppLanguage.NL to mapOf(
             "welcome" to "Welkom",
             "intro_text" to "Neem mooie volleybalmomenten op met je telefoon. " +
+            "intro_main" to "Gebruik de telefoons van spelers als camera’s. De wedstrijd wordt continu opgenomen en de beste of meest omstreden momenten worden met één tik opgeslagen en zijn beschikbaar voor bekijken en analyseren vanuit verschillende hoeken.",
                 "Om batterij te besparen, kan de opname doorgaan met het scherm uit. " +
                 "Stop de opname wanneer je klaar bent.",
             "ok" to "OK",
@@ -599,6 +623,7 @@ object AppStrings {
         AppLanguage.UR to mapOf(
             "welcome" to "خوش آمدید",
             "intro_text" to "اپنے فون سے والی بال کے خوبصورت لمحات ریکارڈ کریں۔ " +
+            "intro_main" to "کھلاڑیوں کے فونز کو کیمروں کے طور پر استعمال کریں۔ میچ مسلسل ریکارڈ ہوتا ہے، اور بہترین یا متنازع لمحات ایک ٹیپ سے محفوظ ہو جاتے ہیں اور مختلف زاویوں سے دیکھنے اور تجزیہ کے لیے دستیاب ہوتے ہیں۔",
                 "بیٹری بچانے کے لیے اسکرین بند ہونے پر بھی ریکارڈنگ جاری رہ سکتی ہے۔ " +
                 "کام ختم ہونے پر ریکارڈنگ بند کریں۔",
             "ok" to "ٹھیک ہے",
@@ -625,6 +650,7 @@ object AppStrings {
         AppLanguage.FA to mapOf(
             "welcome" to "خوش آمدید",
             "intro_text" to "لحظات زیبای والیبال را با گوشی خود ضبط کنید. " +
+            "intro_main" to "از تلفن‌های بازیکنان به‌عنوان دوربین استفاده کنید. بازی به‌صورت پیوسته ضبط می‌شود و بهترین یا بحث‌برانگیزترین لحظات با یک لمس ذخیره شده و برای بازبینی و تحلیل از زوایای مختلف در دسترس است.",
                 "برای صرفه‌جویی در باتری، ضبط می‌تواند با صفحه خاموش ادامه پیدا کند. " +
                 "پس از پایان کار، ضبط را متوقف کنید.",
             "ok" to "باشه",
@@ -653,6 +679,7 @@ object AppStrings {
             "intro_text" to "Snimajte lepe odbojkaške trenutke telefonom. " +
                 "Radi uštede baterije, snimanje može da traje i kada je ekran ugašen. " +
                 "Zaustavite snimanje kada završite.",
+            "intro_main" to "Koristite telefone igrača kao kamere. Utakmica se snima neprekidno, a najbolji ili sporni momenti se čuvaju jednim dodirom i dostupni su za pregled i analizu iz različitih uglova.",
             "ok" to "U redu",
             "consent_title" to "Pre početka",
             "consent_body" to "Ova aplikacija snima video i audio pomoću kamere i mikrofona. Snimanje se nastavlja i kada je ekran ugašen.",
