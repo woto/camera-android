@@ -26,9 +26,17 @@ Select the following data types:
     - **Required or Optional?**: Required
     - **Why is this data collected?**: App functionality
 
+### Device or other IDs
+- **Device or other IDs**: [x] Checked
+    - **Collected?**: Yes (Random UUID stored on device and used in upload filenames)
+    - **Shared?**: No (Not shared with other users; used for server-side identification)
+    - **Processed ephemerally?**: No
+    - **Required or Optional?**: Required
+    - **Why is this data collected?**: App functionality
+
 ## Step 3: Data Usage and Handling
 For both **Videos** and **Audio**:
 - **Purposes**: App functionality
-- **Data Sharing**: "Data is transferred to a third party" (Your server counts as 'off-device', often misinterpreted, but if you own the server, it's technically "Collected". If you share it with *other* users, it is often safer to declare "Shared" or just "Collected" with specific disclosure. For a custom backend you own, "Collected" is usually sufficient, but since it's "Publicly available to anyone with a code", "Shared" is accurate).
+- **Data Sharing**: Mark as **Shared** because clips are accessible to other users with the room code.
 
 **Advisor Note**: Since you stated "Published clips are available to all internet users", you must be transparent that data is arguably **Shared** publicly.
